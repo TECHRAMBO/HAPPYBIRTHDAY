@@ -1493,19 +1493,20 @@ function startTextFormation() {
     tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
     
-    // Render text to get pixel data
+    // Render text to get pixel data - use lighter font weight for thinner, more readable text
     tempCtx.fillStyle = 'white';
-    tempCtx.font = `600 ${fontSize}px 'Rajdhani', Arial, sans-serif`;
+    tempCtx.font = `500 ${fontSize}px 'Rajdhani', Arial, sans-serif`; // Lighter weight (500 vs 600) for thinner text
     tempCtx.textAlign = 'center';
     tempCtx.textBaseline = 'middle';
     
-    // Calculate text block dimensions - position text below heart
+    // Calculate text block dimensions - position text below heart but not too low
     const textWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width));
     const textHeight = lines.length * lineHeight;
     const centerX = width / 2;
     const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
     const heartSize = Math.min(width, height) * (isMobile ? 0.30 : 0.32);
-    const textCenterY = heartCenterY + (heartSize * 0.5) + textHeight * 0.7;
+    // Position text closer to heart - not too low on screen
+    const textCenterY = heartCenterY + (heartSize * 0.5) + (isMobile ? textHeight * 0.4 : textHeight * 0.5);
     
     // Draw text on temp canvas
     lines.forEach((line, i) => {
@@ -1517,34 +1518,54 @@ function startTextFormation() {
     const imageData = tempCtx.getImageData(0, 0, width, height);
     const textPixels = [];
     
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
+    // Sample pixels with higher threshold to get cleaner, thinner text outline
+    // Only get edge pixels, not filled interior for thinner, readable text
+    for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
             const index = (y * width + x) * 4;
             const alpha = imageData.data[index + 3];
-            if (alpha > 128) {
+            // Higher threshold (200 vs 128) to get cleaner edges, avoid interior fill pixels
+            if (alpha > 200) {
                 textPixels.push({ x, y });
             }
         }
     }
     
     if (textPixels.length === 0) {
-        console.warn('No text pixels found');
-        return;
+        console.warn('No text pixels found - trying lower threshold');
+        // Fallback: try with lower threshold if no pixels found
+        for (let y = 0; y < height; y += 1) {
+            for (let x = 0; x < width; x += 1) {
+                const index = (y * width + x) * 4;
+                const alpha = imageData.data[index + 3];
+                if (alpha > 128) {
+                    textPixels.push({ x, y });
+                }
+            }
+        }
+        if (textPixels.length === 0) {
+            console.warn('Still no text pixels found');
+            return;
+        }
     }
     
     // Auto-adjust particle count for legible, clean text
-    // Optimal: ~0.35-0.4 particles per pixel for clean, readable text
-    const optimalParticleCount = Math.floor(textPixels.length * (isMobile ? 0.35 : 0.4));
+    // Reduced density: ~0.15-0.2 particles per pixel for thin, readable text (not thick)
+    const optimalParticleCount = Math.floor(textPixels.length * (isMobile ? 0.15 : 0.2));
     const maxAvailableParticles = particles.length;
     const textParticleCount = Math.min(optimalParticleCount, maxAvailableParticles);
     
-    // Select particles to use for text - use all particles (heart disperses into text)
+    // Ensure minimum particles for readability but not too many
+    const minParticlesForText = Math.floor(textPixels.length * 0.1); // Minimum 10% for visibility
+    const finalParticleCount = Math.max(minParticlesForText, Math.min(textParticleCount, maxAvailableParticles));
+    
+    // Select particles to use for text - use optimal count for thin, readable text
     state.textParticleIndices = [];
     const particlesForText = [];
     
     // Use particles evenly distributed from all heart particles
-    const step = Math.max(1, Math.floor(particles.length / textParticleCount));
-    for (let i = 0; i < textParticleCount; i++) {
+    const step = Math.max(1, Math.floor(particles.length / finalParticleCount));
+    for (let i = 0; i < finalParticleCount; i++) {
         const particleIndex = (i * step) % particles.length;
         const p = particles[particleIndex];
         particlesForText.push(p);
@@ -1558,8 +1579,9 @@ function startTextFormation() {
         p.startY = p.y;
     });
     
-    // Distribute text particles to text positions with optimal density
-    const pixelStep = Math.max(1, Math.floor(textPixels.length / particlesForText.length));
+    // Distribute text particles to text positions with proper spacing for readability
+    // Use larger step to create thinner, more legible text
+    const pixelStep = Math.max(2, Math.floor(textPixels.length / particlesForText.length)); // Larger step = thinner text
     particlesForText.forEach((p, i) => {
         const pixelIndex = (i * pixelStep) % textPixels.length;
         const pixel = textPixels[pixelIndex];
