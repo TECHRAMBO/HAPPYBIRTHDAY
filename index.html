@@ -521,12 +521,6 @@
 </head>
 <body>
 
-    <div id="splash-screen">
-        <h1>HAPPY BIRTHDAY HALIMA 💜</h1>
-        <p class="subtitle">Mobile Edition</p>
-        <button class="start-btn" onclick="initGame()">LET'S GO</button>
-    </div>
-
     <div id="top-msg" class="hidden">
         <div style="margin-bottom: 4px;">DRAG TO ATTRACT</div>
         <div style="font-size: 0.85em; opacity: 0.8;">TAP TO EXPLODE</div>
@@ -703,7 +697,11 @@ canvas.addEventListener('mousedown', e => {
  * UI CONTROLS
  */
 function initGame() {
-    document.getElementById('splash-screen').classList.add('hidden');
+    // Splash screen removed - game starts immediately
+    const splashScreen = document.getElementById('splash-screen');
+    if (splashScreen) {
+        splashScreen.classList.add('hidden');
+    }
     document.getElementById('controls').classList.add('fade-in');
     document.getElementById('top-msg').classList.add('fade-in');
 
@@ -1039,6 +1037,7 @@ function loop() {
 
 // Start
 initParticles();
+initGame(); // Auto-start game without splash screen
 loop();
 
 // Prevent standard iOS gestures
