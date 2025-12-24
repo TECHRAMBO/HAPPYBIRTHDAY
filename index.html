@@ -1093,14 +1093,14 @@ class Particle {
             return; // Heart particles stay at their heart positions
         }
         
-        // Heart formed but not burst yet - keep particles locked
-        if (state.heartFormed && !state.textBurst && state.tapCount < 3 && !state.textForming) {
-            return; // Particles stay at their heart positions
+        // Text formed but not burst yet - keep text particles locked
+        if (state.textFormed && !state.textBurst && state.tapCount === 2) {
+            return; // Text particles stay at their text positions
         }
-
-        // If text hasn't been burst, keep particles locked in place
-        if (!state.textBurst && state.tapCount < 3) {
-            return; // Particles stay at their text/heart positions
+        
+        // Heart formed but text not yet formed - keep particles locked
+        if (state.heartFormed && !state.textForming && !state.textFormed && !state.textBurst && state.tapCount < 3) {
+            return; // Particles stay at their positions (heart or near heart)
         }
 
         let targetX = state.mouseX;
@@ -1248,10 +1248,19 @@ function startHeartFormation() {
     
     // Distribute particles to heart outline positions - optimized for clean, even distribution
     // Track which particles are part of the heart outline (will be kept in place during Phase 2)
+    // Use ~20% of particles for heart outline, rest will be used for text in Phase 2
     state.heartParticleIndices = [];
-    const step = Math.max(1, Math.floor(heartPoints.length / particles.length));
-    particles.forEach((p, i) => {
-        // Evenly distribute particles around the heart outline
+    const heartParticleCount = Math.floor(particles.length * 0.20); // 20% for heart outline
+    const step = Math.max(1, Math.floor(heartPoints.length / heartParticleCount));
+    
+    // First, mark all particles as NOT heart particles
+    particles.forEach(p => {
+        p.isHeartParticle = false;
+    });
+    
+    // Mark only the first portion as heart particles and assign them to heart outline
+    for (let i = 0; i < heartParticleCount; i++) {
+        const p = particles[i];
         const pointIndex = (i * step) % heartPoints.length;
         const point = heartPoints[pointIndex];
         p.targetX = point.x;
@@ -1261,7 +1270,21 @@ function startHeartFormation() {
         p.vy = 0;
         p.isHeartParticle = true; // Mark as heart particle
         state.heartParticleIndices.push(i);
-    });
+    }
+    
+    // Remaining particles will form text in Phase 2 - position them near heart for now
+    for (let i = heartParticleCount; i < particles.length; i++) {
+        const p = particles[i];
+        // Position non-heart particles near heart for smooth transition
+        const angle = (i / particles.length) * Math.PI * 2;
+        const radius = heartSize * 0.6;
+        p.targetX = centerX + Math.cos(angle) * radius;
+        p.targetY = centerY + Math.sin(angle) * radius;
+        p.animating = true;
+        p.vx = 0;
+        p.vy = 0;
+        p.isHeartParticle = false;
+    }
     
     // Hide tap instruction
     const tapInstruction = document.getElementById('tap-instruction');
@@ -1346,7 +1369,14 @@ function startTextFormation() {
         tempCtx.fillText(line, centerX, y);
     });
     
-    // Get pixel data
+    // Get pixel data - ensure canvas is properly rendered first
+    tempCtx.fillStyle = 'white';
+    // Redraw text to ensure it's rendered (some browsers need this)
+    lines.forEach((line, i) => {
+        const y = textCenterY - textHeight / 2 + (i + 0.5) * lineHeight;
+        tempCtx.fillText(line, centerX, y);
+    });
+    
     const imageData = tempCtx.getImageData(0, 0, width, height);
     const textPixels = [];
     
@@ -1360,12 +1390,18 @@ function startTextFormation() {
         }
     }
     
-    if (textPixels.length === 0) return;
+    if (textPixels.length === 0) {
+        console.warn('No text pixels found');
+        return;
+    }
     
     // Get particles that are NOT heart particles (these will form text)
     const textParticles = particles.filter((p, i) => !p.isHeartParticle);
     
-    if (textParticles.length === 0) return;
+    if (textParticles.length === 0) {
+        console.warn('No text particles available (all are heart particles)');
+        return;
+    }
     
     // Store current positions as start positions for animation
     textParticles.forEach(p => {
