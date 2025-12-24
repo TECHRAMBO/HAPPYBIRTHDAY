@@ -41,6 +41,9 @@
             top: 0;
             left: 0;
             z-index: 1;
+            will-change: transform;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
         }
 
         /* --- UI Layers --- */
@@ -552,7 +555,7 @@
                         <span>Density</span>
                         <span id="particle-count-display">1800</span>
                     </div>
-                    <input type="range" id="particle-slider" min="500" max="8000" step="100" value="1800" oninput="updateParticleCount(this.value)">
+                    <input type="range" id="particle-slider" min="400" max="8000" step="50" oninput="updateParticleCount(this.value)">
                 </div>
             </div>
             <div class="settings-section">
@@ -601,13 +604,17 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 const config = {
     // Reduce particles on mobile for 60fps performance
-    particleCount: isMobile ? 1500 : 4000, // Slightly reduced for better performance
+    particleCount: isMobile ? 800 : 4000, // Reduced from 1500 for better mobile performance
     baseSpeed: isMobile ? 1.2 : 1.5,
     friction: 0.95,
     gravityStrength: isMobile ? 0.9 : 0.85, // Slightly stronger on mobile for better feel
     shockwaveForce: isMobile ? 60 : 55, // More pronounced on mobile
     colorSpeed: 0.5, 
-    trailLength: isMobile ? 0.12 : 0.15 // Slightly less trail on mobile for clarity
+    trailLength: isMobile ? 0.08 : 0.15, // Reduced trail opacity on mobile for better performance
+    targetFPS: isMobile ? 60 : 120,
+    adaptiveQuality: isMobile ? true : false,
+    minParticleCount: isMobile ? 400 : 2000,
+    maxParticleCount: isMobile ? 1200 : 6000
 };
 
 const state = {
@@ -623,14 +630,21 @@ const state = {
     showPerformance: false,
     fps: 0,
     frameCount: 0,
-    lastTime: performance.now()
+    lastTime: performance.now(),
+    lastFrameTime: performance.now(),
+    frameDelta: 0,
+    targetFrameTime: 1000 / 60, // 60fps default
+    adaptiveQualityCounter: 0,
+    consecutiveLowFPS: 0,
+    consecutiveHighFPS: 0
 };
 
 /**
  * SETUP
  */
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d', { alpha: false }); // alpha: false helps performance slightly
+const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false }); // Performance optimizations
+ctx.imageSmoothingEnabled = false; // Disable smoothing for better performance
 let width, height;
 
 function resize() {
@@ -646,6 +660,9 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
+
+// Set target frame time based on config
+state.targetFrameTime = 1000 / config.targetFPS;
 
 /**
  * INTERACTION HANDLERS (Touch & Mouse Unified)
@@ -712,8 +729,11 @@ function initGame() {
     settingsPanel.classList.add('visible'); // ADD THIS LINE
     
     // Initialize particle count display
+    const slider = document.getElementById('particle-slider');
+    slider.min = config.minParticleCount;
+    slider.max = config.maxParticleCount;
+    slider.value = config.particleCount;
     document.getElementById('particle-count-display').textContent = config.particleCount;
-    document.getElementById('particle-slider').value = config.particleCount;
 
     setTimeout(() => {
         state.gameStarted = true;
@@ -811,7 +831,9 @@ function toggleSettings() {
 }
 
 function updateParticleCount(value) {
-    const newCount = parseInt(value);
+    let newCount = parseInt(value);
+    // Clamp to min/max limits
+    newCount = Math.max(config.minParticleCount, Math.min(config.maxParticleCount, newCount));
     config.particleCount = newCount;
     document.getElementById('particle-count-display').textContent = newCount;
     
@@ -824,6 +846,10 @@ function updateParticleCount(value) {
     } else if (newCount < currentCount) {
         particles.length = newCount;
     }
+    
+    // Reset adaptive quality counters when manually adjusted
+    state.consecutiveLowFPS = 0;
+    state.consecutiveHighFPS = 0;
     
     if (navigator.vibrate) navigator.vibrate(10);
 }
@@ -932,43 +958,52 @@ class Particle {
         const dx = targetX - this.x;
         const dy = targetY - this.y;
         
+        // Optimized distance squared calculation with clamping
         let distSq = dx*dx + dy*dy;
-        // Optimization: Removing Math.sqrt for gravity logic to save CPU
-        if (distSq < 1000) distSq = 1000;
-        if (distSq > 400000) distSq = 400000;
+        // Clamp to avoid division by zero and limit max force
+        distSq = distSq < 1000 ? 1000 : (distSq > 400000 ? 400000 : distSq);
 
-        // Physics
-        const force = config.gravityStrength * state.gravityMode * 800 / distSq;
+        // Cached calculations for better performance
         const timeScale = state.isSlowMo ? 0.15 : 1.0;
+        const force = (config.gravityStrength * state.gravityMode * 800) / distSq;
+        const forceX = dx * force * timeScale;
+        const forceY = dy * force * timeScale;
 
-        this.vx += (dx * force) * timeScale;
-        this.vy += (dy * force) * timeScale;
+        // Apply forces
+        this.vx += forceX;
+        this.vy += forceY;
 
+        // Apply friction
         this.vx *= config.friction;
         this.vy *= config.friction;
 
-        this.x += this.vx * timeScale;
-        this.y += this.vy * timeScale;
+        // Update position
+        const moveX = this.vx * timeScale;
+        const moveY = this.vy * timeScale;
+        this.x += moveX;
+        this.y += moveY;
 
-        // Wrap around
+        // Optimized wrap around
         if (this.x < 0) this.x = width;
-        if (this.x > width) this.x = 0;
+        else if (this.x > width) this.x = 0;
         if (this.y < 0) this.y = height;
-        if (this.y > height) this.y = 0;
+        else if (this.y > height) this.y = 0;
     }
 
     draw() {
+        // Optimized speed calculation
         const speed = Math.abs(this.vx) + Math.abs(this.vy);
         const scheme = colorSchemes[state.colorScheme];
         
+        // Optimized color calculation with bitwise rounding for performance
         const hue = (state.hue + this.hueOffset + (speed * 8)) % 360;
         const saturation = scheme.saturation;
         const light = scheme.lightness + (speed * 5);
-        const size = this.size;
-
-        ctx.fillStyle = `hsl(${hue}, ${Math.min(saturation, 100)}%, ${Math.min(light, 90)}%)`;
+        
+        // Optimized HSL string - removed spaces, use bitwise OR for integer conversion
+        ctx.fillStyle = `hsl(${hue|0},${saturation|0}%,${(light > 90 ? 90 : light)|0}%)`;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.size, 0, 6.283185307179586); // 2*PI pre-calculated
         ctx.fill();
     }
 }
@@ -1001,37 +1036,86 @@ function createShockwave(x, y, multiplier) {
 }
 
 /**
+ * ADAPTIVE QUALITY SYSTEM
+ */
+function adjustQuality() {
+    if (!config.adaptiveQuality) return;
+    
+    if (state.fps < 50) {
+        state.consecutiveLowFPS++;
+        state.consecutiveHighFPS = 0;
+        
+        if (state.consecutiveLowFPS >= 3 && config.particleCount > config.minParticleCount) {
+            const reduction = Math.max(50, Math.floor(config.particleCount * 0.1));
+            config.particleCount = Math.max(config.minParticleCount, config.particleCount - reduction);
+            
+            // Resize particle array
+            if (particles.length > config.particleCount) {
+                particles.length = config.particleCount;
+            }
+            state.consecutiveLowFPS = 0;
+        }
+    } else if (state.fps >= 58) {
+        state.consecutiveHighFPS++;
+        state.consecutiveLowFPS = 0;
+        
+        if (state.consecutiveHighFPS >= 5 && config.particleCount < config.maxParticleCount) {
+            const increase = Math.min(50, Math.floor((config.maxParticleCount - config.particleCount) * 0.1));
+            config.particleCount = Math.min(config.maxParticleCount, config.particleCount + increase);
+            
+            // Add particles if needed
+            while (particles.length < config.particleCount) {
+                particles.push(new Particle());
+            }
+            state.consecutiveHighFPS = 0;
+        }
+    }
+}
+
+/**
  * RENDER LOOP
  */
 function loop() {
-    // Update performance metrics
-    state.frameCount++;
     const now = performance.now();
-    if (now - state.lastTime >= 1000) {
-        state.fps = state.frameCount;
-        state.frameCount = 0;
-        state.lastTime = now;
+    state.frameDelta = now - state.lastFrameTime;
+    
+    // Frame rate limiting - only render if enough time has passed
+    if (state.frameDelta >= state.targetFrameTime) {
+        state.lastFrameTime = now - (state.frameDelta % state.targetFrameTime);
         
-        if (state.showPerformance) {
-            document.getElementById('fps').textContent = state.fps;
-            document.getElementById('particle-count').textContent = particles.length;
+        // Update performance metrics
+        state.frameCount++;
+        if (now - state.lastTime >= 1000) {
+            state.fps = state.frameCount;
+            state.frameCount = 0;
+            state.lastTime = now;
+            
+            // Adaptive quality adjustment
+            adjustQuality();
+            
+            if (state.showPerformance) {
+                document.getElementById('fps').textContent = state.fps;
+                document.getElementById('particle-count').textContent = particles.length;
+            }
         }
+        
+        // Trail effect - optimized for mobile
+        ctx.fillStyle = `rgba(0, 0, 0, ${config.trailLength})`;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.globalCompositeOperation = 'lighter';
+        
+        state.hue += config.colorSpeed;
+
+        // Update and draw particles
+        for(let i = 0; i < particles.length; i++) {
+            particles[i].update();
+            particles[i].draw();
+        }
+
+        ctx.globalCompositeOperation = 'source-over';
     }
     
-    // Trail effect
-    ctx.fillStyle = `rgba(0, 0, 0, ${config.trailLength})`;
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.globalCompositeOperation = 'lighter';
-    
-    state.hue += config.colorSpeed;
-
-    for(let i = 0; i < particles.length; i++) {
-        particles[i].update();
-        particles[i].draw();
-    }
-
-    ctx.globalCompositeOperation = 'source-over';
     requestAnimationFrame(loop);
 }
 
