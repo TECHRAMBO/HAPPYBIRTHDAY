@@ -598,6 +598,11 @@
     <div id="tap-instruction" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.5); font-family: 'Rajdhani', sans-serif; font-size: clamp(0.9rem, 3vw, 1.2rem); letter-spacing: 3px; text-transform: uppercase; z-index: 15; pointer-events: none; transition: opacity 0.5s ease;">
         tap
     </div>
+
+    <!-- Phase 2: Tap Again Instruction -->
+    <div id="tap-again-instruction" style="position: absolute; bottom: max(15%, 120px); left: 50%; transform: translate(-50%, 0); color: rgba(255, 255, 255, 0.5); font-family: 'Rajdhani', sans-serif; font-size: clamp(0.85rem, 2.8vw, 1.1rem); letter-spacing: 3px; text-transform: uppercase; z-index: 15; pointer-events: none; opacity: 0; transition: opacity 0.8s ease;">
+        tap again
+    </div>
     
     <canvas id="canvas"></canvas>
 
@@ -648,7 +653,7 @@ const state = {
     heartForming: false, // Animation in progress
     heartFormed: false, // Heart formation complete
     heartAnimationStart: 0, // Timestamp when heart animation started
-    heartAnimationDuration: 2000 // 2 seconds for heart formation
+    heartAnimationDuration: isMobile ? 1000 : 1300 // Faster on mobile, snappier on desktop
 };
 
 /**
@@ -658,12 +663,18 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false }); // Performance optimizations
 ctx.imageSmoothingEnabled = false; // Disable smoothing for better performance
 let width, height;
+const dpr = window.devicePixelRatio || 1; // Device pixel ratio for crisp rendering
 
 function resize() {
     width = window.innerWidth;
     height = window.innerHeight;
-    canvas.width = width;
-    canvas.height = height;
+    // Scale canvas for HD rendering on Retina displays
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.scale(dpr, dpr); // Scale context to match device pixel ratio
+    ctx.imageSmoothingEnabled = false; // Re-apply after scaling
     
     if(!state.gameStarted) {
         state.mouseX = width/2;
@@ -985,7 +996,8 @@ class Particle {
         
         this.vx = (Math.random() - 0.5) * 2;
         this.vy = (Math.random() - 0.5) * 2;
-        this.size = Math.random() * 2 + 1; // Slightly larger for mobile visibility
+        // Larger particles on mobile for better visibility, slightly larger on desktop for HD quality
+        this.size = isMobile ? (Math.random() * 2.5 + 1.5) : (Math.random() * 2.2 + 1.2);
         // Increased hue offset range for more vibrant color variation
         const currentScheme = colorSchemes[state.colorScheme] || colorSchemes.neon;
         this.hueOffset = (Math.random() - 0.5) * currentScheme.hueRange;
@@ -1004,8 +1016,8 @@ class Particle {
             const elapsed = performance.now() - state.heartAnimationStart;
             const progress = Math.min(1, elapsed / state.heartAnimationDuration);
             
-            // Smooth easing function (ease-out-cubic)
-            const eased = 1 - Math.pow(1 - progress, 3);
+            // Faster easing function (ease-out-exponential) for snappier animation
+            const eased = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
             
             // Interpolate from start position to target position
             this.x = this.startX + (this.targetX - this.startX) * eased;
@@ -1086,19 +1098,24 @@ class Particle {
         
         // Elegant white luminescent glow when heart is forming or formed (Phase 1)
         if (state.heartForming || (state.heartFormed && !state.textBurst && state.tapCount < 3)) {
+            // Enhanced HD glow effect - optimized for mobile and desktop
+            const glowBlur = isMobile ? 22 : 24; // Brighter, more visible glow
+            const glowIntensity = isMobile ? 0.9 : 0.85; // Slightly more intense on mobile
+            const coreSize = isMobile ? 0.9 : 0.88; // Slightly larger core on mobile
+            
             // Refined ethereal glow effect - soft outer glow with bright core
-            ctx.shadowBlur = 18;
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+            ctx.shadowBlur = glowBlur;
+            ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity})`;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * 1.15, 0, 6.283185307179586);
+            ctx.arc(this.x, this.y, this.size * 1.2, 0, 6.283185307179586);
             ctx.fill();
             
-            // Bright core for clarity
+            // Bright core for clarity and HD crispness
             ctx.shadowBlur = 0;
             ctx.fillStyle = 'rgba(255, 255, 255, 1)';
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * 0.85, 0, 6.283185307179586);
+            ctx.arc(this.x, this.y, this.size * coreSize, 0, 6.283185307179586);
             ctx.fill();
             return;
         }
@@ -1170,10 +1187,11 @@ function startHeartFormation() {
     state.heartForming = true;
     state.heartAnimationStart = performance.now();
     
-    // Calculate heart size - use a reasonable size for initial heart
+    // Calculate heart size - optimized for Phase 2 text space (30-32% of screen, smaller and more elegant)
     const centerX = width / 2;
-    const centerY = height / 2;
-    const heartSize = Math.min(width, height) * 0.4; // 40% of screen size
+    // Position heart slightly higher to leave room for text below in Phase 2
+    const centerY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
+    const heartSize = Math.min(width, height) * (isMobile ? 0.30 : 0.32); // Smaller, more elegant size
     const heartPoints = generateHeartOutline(centerX, centerY, heartSize);
     
     if (heartPoints.length === 0) return;
@@ -1184,9 +1202,10 @@ function startHeartFormation() {
         p.startY = p.y;
     });
     
-    // Distribute particles to heart outline positions
+    // Distribute particles to heart outline positions - optimized for clean, even distribution
     const step = Math.max(1, Math.floor(heartPoints.length / particles.length));
     particles.forEach((p, i) => {
+        // Evenly distribute particles around the heart outline
         const pointIndex = (i * step) % heartPoints.length;
         const point = heartPoints[pointIndex];
         p.targetX = point.x;
@@ -1213,6 +1232,14 @@ function startHeartFormation() {
             p.y = p.targetY;
             p.animating = false;
         });
+        
+        // Show "tap again" instruction for Phase 2
+        const tapAgainInstruction = document.getElementById('tap-again-instruction');
+        if (tapAgainInstruction) {
+            setTimeout(() => {
+                tapAgainInstruction.style.opacity = '0.5';
+            }, 300); // Small delay for smooth transition
+        }
     }, state.heartAnimationDuration);
 }
 
@@ -1221,7 +1248,8 @@ function startHeartFormation() {
  */
 function generateHeartOutline(centerX, centerY, size) {
     const points = [];
-    const steps = 120; // More points for smoother curve
+    // More points for smoother curve - optimized for HD rendering
+    const steps = isMobile ? 120 : 160; // More points on desktop for crisper outline
     
     for (let i = 0; i <= steps; i++) {
         const t = (i / steps) * Math.PI * 2;
