@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>POCKET FIREWORK: Mobile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --bg-color: #000000;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            font-family: 'Rajdhani', sans-serif;
+            color: white;
+            height: 100vh;
+            width: 100vw;
+            touch-action: none; /* Disables browser zooming/scrolling */
+            -webkit-user-select: none; /* Safari select disable */
+            user-select: none;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* --- UI Layers --- */
+
+        /* Splash Screen */
+        #splash-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            transition: opacity 0.6s ease;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            background: linear-gradient(90deg, #fff, var(--neon-blue));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-align: center;
+        }
+
+        p.subtitle {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 40px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        button.start-btn {
+            background: rgba(0, 243, 255, 0.1);
+            color: var(--neon-blue);
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            padding: 15px 40px;
+            border: 2px solid var(--neon-blue);
+            border-radius: 30px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+        }
+
+        button.start-btn:active {
+            background: var(--neon-blue);
+            color: #000;
+        }
+
+        /* Mobile Controls (Bottom Bar) */
+        #controls {
+            position: absolute;
+            bottom: max(30px, env(safe-area-inset-bottom, 30px)); /* Better safe area handling */
+            left: 0;
+            width: 100%;
+            z-index: 20;
+            display: flex;
+            justify-content: center; /* Center the 2 buttons */
+            gap: 40px; /* Space between buttons */
+            padding: 0 20px;
+            box-sizing: border-box;
+            pointer-events: none; /* Let touches pass through gaps */
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        .control-btn {
+            pointer-events: auto;
+            width: clamp(70px, 12vw, 90px); /* Responsive sizing */
+            height: clamp(70px, 12vw, 90px);
+            min-width: 70px; /* Ensure minimum touch target */
+            min-height: 70px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.4); /* Thicker border for visibility */
+            background: rgba(0, 0, 0, 0.7); /* More opaque for better visibility */
+            backdrop-filter: blur(8px);
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: clamp(0.75rem, 2.5vw, 0.9rem); /* Responsive font */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            touch-action: manipulation;
+            transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* Better depth */
+        }
+
+        .control-btn:active, .control-btn.active {
+            transform: scale(0.9); /* More pronounced press */
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        #btn-mode.mode-attract { 
+            border-color: var(--neon-blue); 
+            color: var(--neon-blue); 
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3); 
+        }
+        #btn-mode.mode-repel { 
+            border-color: var(--neon-pink); 
+            color: var(--neon-pink); 
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3); 
+        }
+        
+        #btn-slow { 
+            border-color: #ffd700; 
+            color: #ffd700; 
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        #btn-slow:active, #btn-slow.active { 
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.3); 
+        }
+
+        .hidden { opacity: 0 !important; pointer-events: none !important; }
+        .fade-in { opacity: 1 !important; }
+
+        /* Instructions Overlay */
+        #top-msg {
+            position: absolute;
+            top: max(20px, env(safe-area-inset-top, 20px));
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7); /* More visible */
+            font-size: clamp(0.7rem, 2vw, 0.9rem); /* Responsive */
+            pointer-events: none;
+            z-index: 10;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8), 0 0 4px rgba(0, 0, 0, 0.5); /* Better shadow */
+            padding: 0 20px;
+            box-sizing: border-box;
+            line-height: 1.4;
+        }
+
+        /* Settings Panel */
+        #settings-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 30;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #settings-panel.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #btn-settings {
+            width: clamp(50px, 10vw, 60px);
+            height: clamp(50px, 10vw, 60px);
+            min-width: 50px;
+            min-height: 50px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: clamp(1.2rem, 4vw, 1.5rem);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            touch-action: manipulation;
+            pointer-events: auto !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            transition: transform 0.15s;
+        }
+        
+        #btn-settings:active {
+            transform: scale(0.9);
+        }
+
+        #settings-menu {
+            position: absolute;
+            top: 70px;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            min-width: 250px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: none;
+        }
+
+        #settings-menu.visible {
+            display: block;
+        }
+
+        .settings-section {
+            margin-bottom: 20px;
+        }
+
+        .settings-section h3 {
+            font-size: 0.9rem;
+            margin: 0 0 10px 0;
+            color: var(--neon-blue);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .color-scheme-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            margin: 5px;
+            cursor: pointer;
+            display: inline-block;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .color-scheme-btn.active {
+            border-color: var(--neon-blue);
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-label {
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            cursor: pointer;
+            border: none;
+        }
+
+        .preset-btn {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .preset-btn:hover, .preset-btn:active {
+            background: rgba(0, 243, 255, 0.2);
+            border-color: var(--neon-blue);
+        }
+
+        /* Performance Metrics */
+        #performance {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.7rem;
+            font-family: 'Rajdhani', monospace;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #performance.visible {
+            opacity: 1;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen">
+        <h1>POCKET<br>FIREWORK</h1>
+        <p class="subtitle">Mobile Edition</p>
+        <button class="start-btn" onclick="initGame()">Enter System</button>
+    </div>
+
+    <div id="top-msg" class="hidden">
+        <div style="margin-bottom: 4px;">DRAG TO ATTRACT</div>
+        <div style="font-size: 0.85em; opacity: 0.8;">TAP TO EXPLODE</div>
+    </div>
+
+    <div id="performance" class="hidden">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Particles: <span id="particle-count">0</span></div>
+    </div>
+
+    <div id="settings-panel" class="hidden">
+        <div id="btn-settings" onclick="toggleSettings()">⚙</div>
+        <div id="settings-menu">
+            <div class="settings-section">
+                <h3>Color Scheme</h3>
+                <div id="color-schemes">
+                    <div class="color-scheme-btn active" data-scheme="neon" style="background: linear-gradient(135deg, #00f3ff, #ff00ff);" onclick="setColorScheme('neon')" title="Neon"></div>
+                    <div class="color-scheme-btn" data-scheme="fire" style="background: linear-gradient(135deg, #ff6b6b, #ffd93d);" onclick="setColorScheme('fire')" title="Fire"></div>
+                    <div class="color-scheme-btn" data-scheme="ocean" style="background: linear-gradient(135deg, #4ecdc4, #44a3ff);" onclick="setColorScheme('ocean')" title="Ocean"></div>
+                    <div class="color-scheme-btn" data-scheme="purple" style="background: linear-gradient(135deg, #667eea, #764ba2);" onclick="setColorScheme('purple')" title="Purple"></div>
+                    <div class="color-scheme-btn" data-scheme="pink" style="background: linear-gradient(135deg, #f093fb, #f5576c);" onclick="setColorScheme('pink')" title="Pink"></div>
+                    <div class="color-scheme-btn" data-scheme="cyan" style="background: linear-gradient(135deg, #4facfe, #00f2fe);" onclick="setColorScheme('cyan')" title="Cyan"></div>
+                </div>
+            </div>
+            <div class="settings-section">
+                <h3>Particle Count</h3>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Density</span>
+                        <span id="particle-count-display">1800</span>
+                    </div>
+                    <input type="range" id="particle-slider" min="500" max="8000" step="100" value="1800" oninput="updateParticleCount(this.value)">
+                </div>
+            </div>
+            <div class="settings-section">
+                <h3>Preset Patterns</h3>
+                <button class="preset-btn" onclick="applyPattern('vortex')">🌀 Vortex</button>
+                <button class="preset-btn" onclick="applyPattern('spiral')">🌪️ Spiral</button>
+                <button class="preset-btn" onclick="applyPattern('explosion')">💥 Explosion</button>
+                <button class="preset-btn" onclick="applyPattern('orbit')">🌍 Orbit</button>
+                <button class="preset-btn" onclick="applyPattern('wave')">🌊 Wave</button>
+            </div>
+            <div class="settings-section">
+                <h3>Show Performance</h3>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="show-performance" onchange="togglePerformance(this.checked)" style="margin-right: 10px;">
+                    <span>Display FPS & Stats</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls" class="hidden">
+        <!-- Gravity Toggle -->
+        <div id="btn-mode" class="control-btn mode-attract" onclick="toggleMode()">
+            <span>Mode</span>
+            <span id="mode-label" style="font-size:0.7rem">Gravity</span>
+        </div>
+
+        <!-- Time Dilation (Hold) -->
+        <div id="btn-slow" class="control-btn" 
+             ontouchstart="setSlow(true)" 
+             ontouchend="setSlow(false)"
+             onmousedown="setSlow(true)"
+             onmouseup="setSlow(false)">
+            <span>Slow</span>
+            <span style="font-size:0.7rem">Motion</span>
+        </div>
+    </div>
+    
+    <canvas id="canvas"></canvas>
+
+<script>
+/**
+ * MOBILE CONFIGURATION
+ */
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+const config = {
+    // Reduce particles on mobile for 60fps performance
+    particleCount: isMobile ? 1500 : 4000, // Slightly reduced for better performance
+    baseSpeed: isMobile ? 1.2 : 1.5,
+    friction: 0.95,
+    gravityStrength: isMobile ? 0.9 : 0.85, // Slightly stronger on mobile for better feel
+    shockwaveForce: isMobile ? 60 : 55, // More pronounced on mobile
+    colorSpeed: 0.5, 
+    trailLength: isMobile ? 0.12 : 0.15 // Slightly less trail on mobile for clarity
+};
+
+const state = {
+    mouseX: window.innerWidth / 2,
+    mouseY: window.innerHeight / 2,
+    isTouching: false, // For tracking if user is touching canvas
+    gravityMode: 1, // 1 = Attract, -1 = Repel
+    isSlowMo: false,
+    hue: 200,
+    gameStarted: false,
+    autoTimer: 0,
+    colorScheme: 'neon',
+    showPerformance: false,
+    fps: 0,
+    frameCount: 0,
+    lastTime: performance.now()
+};
+
+/**
+ * SETUP
+ */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false }); // alpha: false helps performance slightly
+let width, height;
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+    
+    if(!state.gameStarted) {
+        state.mouseX = width/2;
+        state.mouseY = height/2;
+    }
+}
+window.addEventListener('resize', resize);
+resize();
+
+/**
+ * INTERACTION HANDLERS (Touch & Mouse Unified)
+ */
+
+// 1. Canvas Touch Interaction
+canvas.addEventListener('touchstart', (e) => {
+    if (!state.gameStarted) return;
+    e.preventDefault();
+    
+    // Update position immediately
+    state.mouseX = e.touches[0].clientX;
+    state.mouseY = e.touches[0].clientY;
+    state.isTouching = true;
+
+    // Visual feedback - create shockwave on initial tap
+    createShockwave(state.mouseX, state.mouseY, 1.2); // Slightly stronger on mobile
+    
+    // Haptic feedback if available
+    if (navigator.vibrate && isMobile) {
+        navigator.vibrate(10); // Subtle tap feedback
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (!state.gameStarted) return;
+    e.preventDefault(); // Prevent scrolling
+    state.mouseX = e.touches[0].clientX;
+    state.mouseY = e.touches[0].clientY;
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    state.isTouching = false;
+});
+
+// 2. Mouse Interaction (Fallback for desktop)
+canvas.addEventListener('mousemove', e => {
+    if (state.gameStarted) {
+        state.mouseX = e.clientX;
+        state.mouseY = e.clientY;
+    }
+});
+canvas.addEventListener('mousedown', e => {
+    if (!state.gameStarted) return;
+    createShockwave(e.clientX, e.clientY, 1.0);
+});
+
+/**
+ * UI CONTROLS
+ */
+function initGame() {
+    document.getElementById('splash-screen').classList.add('hidden');
+    document.getElementById('controls').classList.add('fade-in');
+    document.getElementById('top-msg').classList.add('fade-in');
+
+    // Fix: Remove 'hidden' class and add both 'fade-in' and 'visible' for settings panel
+    const settingsPanel = document.getElementById('settings-panel');
+    settingsPanel.classList.remove('hidden');
+    settingsPanel.classList.add('fade-in');
+    settingsPanel.classList.add('visible'); // ADD THIS LINE
+    
+    // Initialize particle count display
+    document.getElementById('particle-count-display').textContent = config.particleCount;
+    document.getElementById('particle-slider').value = config.particleCount;
+
+    setTimeout(() => {
+        state.gameStarted = true;
+        createShockwave(width/2, height/2, 2.0); // Big Bang start
+        
+        // Show brief instruction hint on mobile
+        if (isMobile) {
+            setTimeout(() => {
+                const msg = document.getElementById('top-msg');
+                if (msg) {
+                    msg.style.opacity = '0.9';
+                    setTimeout(() => {
+                        msg.style.opacity = '0.7';
+                    }, 3000);
+                }
+            }, 500);
+        }
+    }, 100);
+}
+
+function toggleMode() {
+    state.gravityMode *= -1;
+    const btn = document.getElementById('btn-mode');
+    const label = document.getElementById('mode-label');
+    
+    if (state.gravityMode === 1) {
+        btn.classList.replace('mode-repel', 'mode-attract');
+        label.innerText = "GRAVITY";
+    } else {
+        btn.classList.replace('mode-attract', 'mode-repel');
+        label.innerText = "REPEL";
+    }
+    
+    // Feedback shockwave
+    createShockwave(state.mouseX, state.mouseY, 0.5);
+    
+    // Haptic feedback if available
+    if (navigator.vibrate) navigator.vibrate(50);
+}
+
+function setSlow(active) {
+    state.isSlowMo = active;
+    const btn = document.getElementById('btn-slow');
+    if(active) {
+        btn.classList.add('active');
+        if (navigator.vibrate) navigator.vibrate(20);
+    } else {
+        btn.classList.remove('active');
+    }
+}
+
+/**
+ * COLOR SCHEMES
+ */
+const colorSchemes = {
+    neon: { baseHue: 200, saturation: 85, lightness: 50 },
+    fire: { baseHue: 15, saturation: 100, lightness: 55 },
+    ocean: { baseHue: 180, saturation: 80, lightness: 50 },
+    purple: { baseHue: 270, saturation: 70, lightness: 55 },
+    pink: { baseHue: 320, saturation: 90, lightness: 60 },
+    cyan: { baseHue: 190, saturation: 100, lightness: 50 }
+};
+
+function setColorScheme(scheme) {
+    state.colorScheme = scheme;
+    state.hue = colorSchemes[scheme].baseHue;
+    
+    // Update UI
+    document.querySelectorAll('.color-scheme-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-scheme') === scheme) {
+            btn.classList.add('active');
+        }
+    });
+    
+    if (navigator.vibrate) navigator.vibrate(30);
+}
+
+/**
+ * SETTINGS PANEL
+ */
+function toggleSettings() {
+    const panel = document.getElementById('settings-panel');
+    const menu = document.getElementById('settings-menu');
+    
+    if (panel.classList.contains('visible')) {
+        menu.classList.remove('visible');
+        setTimeout(() => panel.classList.remove('visible'), 300);
+    } else {
+        panel.classList.add('visible');
+        setTimeout(() => menu.classList.add('visible'), 50);
+    }
+    
+    if (navigator.vibrate) navigator.vibrate(20);
+}
+
+function updateParticleCount(value) {
+    const newCount = parseInt(value);
+    config.particleCount = newCount;
+    document.getElementById('particle-count-display').textContent = newCount;
+    
+    // Resize particle array
+    const currentCount = particles.length;
+    if (newCount > currentCount) {
+        for (let i = currentCount; i < newCount; i++) {
+            particles.push(new Particle());
+        }
+    } else if (newCount < currentCount) {
+        particles.length = newCount;
+    }
+    
+    if (navigator.vibrate) navigator.vibrate(10);
+}
+
+function togglePerformance(enabled) {
+    state.showPerformance = enabled;
+    const perfEl = document.getElementById('performance');
+    if (enabled) {
+        perfEl.classList.add('visible');
+    } else {
+        perfEl.classList.remove('visible');
+    }
+}
+
+/**
+ * PRESET PATTERNS
+ */
+function applyPattern(pattern) {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    
+    particles.forEach((p, i) => {
+        const angle = (i / particles.length) * Math.PI * 2;
+        const radius = Math.min(width, height) * 0.3;
+        
+        switch(pattern) {
+            case 'vortex':
+                p.x = centerX + Math.cos(angle) * radius;
+                p.y = centerY + Math.sin(angle) * radius;
+                p.vx = -Math.sin(angle) * 2;
+                p.vy = Math.cos(angle) * 2;
+                break;
+                
+            case 'spiral':
+                const spiralRadius = radius * (i / particles.length);
+                const spiralAngle = angle + (i * 0.1);
+                p.x = centerX + Math.cos(spiralAngle) * spiralRadius;
+                p.y = centerY + Math.sin(spiralAngle) * spiralRadius;
+                p.vx = -Math.sin(spiralAngle) * 1.5;
+                p.vy = Math.cos(spiralAngle) * 1.5;
+                break;
+                
+            case 'explosion':
+                p.x = centerX;
+                p.y = centerY;
+                p.vx = Math.cos(angle) * (Math.random() * 8 + 4);
+                p.vy = Math.sin(angle) * (Math.random() * 8 + 4);
+                break;
+                
+            case 'orbit':
+                p.x = centerX + Math.cos(angle) * radius;
+                p.y = centerY + Math.sin(angle) * radius;
+                p.vx = -Math.sin(angle) * 1;
+                p.vy = Math.cos(angle) * 1;
+                break;
+                
+            case 'wave':
+                p.x = (i / particles.length) * width;
+                p.y = centerY + Math.sin(angle * 3) * (height * 0.2);
+                p.vx = 0;
+                p.vy = Math.cos(angle * 3) * 2;
+                break;
+        }
+    });
+    
+    createShockwave(centerX, centerY, 0.3);
+    if (navigator.vibrate) navigator.vibrate(40);
+}
+
+/**
+ * PARTICLE ENGINE
+ */
+class Particle {
+    constructor() {
+        this.reset(true);
+    }
+
+    reset(randomStart = false) {
+        if (randomStart) {
+            this.x = Math.random() * width;
+            this.y = Math.random() * height;
+        } else {
+            // Spawn closer to center on mobile to keep action on screen
+            this.x = (Math.random() * width);
+            this.y = Math.random() > 0.5 ? 0 : height;
+        }
+        
+        this.vx = (Math.random() - 0.5) * 2;
+        this.vy = (Math.random() - 0.5) * 2;
+        this.size = Math.random() * 2 + 1; // Slightly larger for mobile visibility
+        this.hueOffset = Math.random() * 50; 
+    }
+
+    update() {
+        let targetX = state.mouseX;
+        let targetY = state.mouseY;
+
+        // Idle Animation
+        if (!state.gameStarted) {
+            state.autoTimer += 0.00005;
+            const t = Date.now() * 0.0008;
+            targetX = width/2 + Math.cos(t) * (width/3.5);
+            targetY = height/2 + Math.sin(t * 1.5) * (height/4);
+        }
+
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        
+        let distSq = dx*dx + dy*dy;
+        // Optimization: Removing Math.sqrt for gravity logic to save CPU
+        if (distSq < 1000) distSq = 1000;
+        if (distSq > 400000) distSq = 400000;
+
+        // Physics
+        const force = config.gravityStrength * state.gravityMode * 800 / distSq;
+        const timeScale = state.isSlowMo ? 0.15 : 1.0;
+
+        this.vx += (dx * force) * timeScale;
+        this.vy += (dy * force) * timeScale;
+
+        this.vx *= config.friction;
+        this.vy *= config.friction;
+
+        this.x += this.vx * timeScale;
+        this.y += this.vy * timeScale;
+
+        // Wrap around
+        if (this.x < 0) this.x = width;
+        if (this.x > width) this.x = 0;
+        if (this.y < 0) this.y = height;
+        if (this.y > height) this.y = 0;
+    }
+
+    draw() {
+        const speed = Math.abs(this.vx) + Math.abs(this.vy);
+        const scheme = colorSchemes[state.colorScheme];
+        
+        const hue = (state.hue + this.hueOffset + (speed * 8)) % 360;
+        const saturation = scheme.saturation;
+        const light = scheme.lightness + (speed * 5);
+        const size = this.size;
+
+        ctx.fillStyle = `hsl(${hue}, ${Math.min(saturation, 100)}%, ${Math.min(light, 90)}%)`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+const particles = [];
+
+function initParticles() {
+    particles.length = 0;
+    for (let i = 0; i < config.particleCount; i++) {
+        particles.push(new Particle());
+    }
+}
+
+function createShockwave(x, y, multiplier) {
+    particles.forEach(p => {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const maxDist = 500 * multiplier;
+        
+        if (dist < maxDist) {
+            const force = (maxDist - dist) / maxDist; // 0.0 to 1.0
+            const angle = Math.atan2(dy, dx);
+            const strength = config.shockwaveForce * force * multiplier;
+            
+            p.vx += Math.cos(angle) * strength;
+            p.vy += Math.sin(angle) * strength;
+        }
+    });
+}
+
+/**
+ * RENDER LOOP
+ */
+function loop() {
+    // Update performance metrics
+    state.frameCount++;
+    const now = performance.now();
+    if (now - state.lastTime >= 1000) {
+        state.fps = state.frameCount;
+        state.frameCount = 0;
+        state.lastTime = now;
+        
+        if (state.showPerformance) {
+            document.getElementById('fps').textContent = state.fps;
+            document.getElementById('particle-count').textContent = particles.length;
+        }
+    }
+    
+    // Trail effect
+    ctx.fillStyle = `rgba(0, 0, 0, ${config.trailLength})`;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.globalCompositeOperation = 'lighter';
+    
+    state.hue += config.colorSpeed;
+
+    for(let i = 0; i < particles.length; i++) {
+        particles[i].update();
+        particles[i].draw();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(loop);
+}
+
+// Start
+initParticles();
+loop();
+
+// Prevent standard iOS gestures
+document.addEventListener('gesturestart', function (e) {
+    e.preventDefault();
+});
+
+</script>
+</body>
+</html>
