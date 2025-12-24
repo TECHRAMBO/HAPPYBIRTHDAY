@@ -594,14 +594,9 @@
         </div>
     </div>
 
-    <!-- Phase 1: Tap Instruction -->
-    <div id="tap-instruction" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.5); font-family: 'Rajdhani', sans-serif; font-size: clamp(0.9rem, 3vw, 1.2rem); letter-spacing: 3px; text-transform: uppercase; z-index: 15; pointer-events: none; transition: opacity 0.5s ease;">
-        tap
-    </div>
-
-    <!-- Phase 2: Tap Again Instruction (centered in heart) -->
-    <div id="tap-again-instruction" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.5); font-family: 'Rajdhani', sans-serif; font-size: clamp(0.85rem, 2.8vw, 1.1rem); letter-spacing: 3px; text-transform: uppercase; z-index: 15; pointer-events: none; opacity: 0; transition: opacity 0.8s ease;">
-        tap again
+    <!-- Birthday Message in Center of Heart -->
+    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.9); font-family: 'Rajdhani', sans-serif; font-size: clamp(1rem, 4vw, 1.5rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.4; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity 1s ease;">
+        HAPPY<br>BIRTHDAY<br>HALIMA
     </div>
     
     <canvas id="canvas"></canvas>
@@ -703,85 +698,48 @@ state.targetFrameTime = 1000 / config.targetFPS;
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
-    // Phase 1: First tap triggers heart formation
-    if (state.tapCount === 0) {
-        startHeartFormation();
-        if (navigator.vibrate && isMobile) {
-            navigator.vibrate(20); // Subtle tap feedback
-        }
-        return;
-    }
-    
-    // Phase 2: Second tap triggers text reveal
-    if (state.tapCount === 1 && state.heartFormed && !state.textForming && !state.textFormed) {
-        startTextFormation();
-        if (navigator.vibrate && isMobile) {
-            navigator.vibrate(20); // Subtle tap feedback
-        }
-        return;
-    }
-    
-    // Phase 3: Third tap on text disperses particles and activates interactive mode
-    if (state.tapCount === 2 && state.textFormed && !state.textBurst) {
-        // Check if tap is within text bounds
-        const tapX = e.touches ? e.touches[0].clientX : e.clientX;
-        const tapY = e.touches ? e.touches[0].clientY : e.clientY;
+    // Simplified: Any tap when heart is formed disperses particles and starts game
+    if (state.heartFormed && !state.gameStarted) {
+        state.gameStarted = true;
+        state.textBurst = true;
         
-        if (state.textBounds && 
-            tapX >= state.textBounds.minX && tapX <= state.textBounds.maxX &&
-            tapY >= state.textBounds.minY && tapY <= state.textBounds.maxY) {
-            
-            state.textBurst = true;
-            state.tapCount = 3;
-            state.gameStarted = true;
-            
-            // Hide tap again instruction if still visible
-            const tapAgainInstruction = document.getElementById('tap-again-instruction');
-            if (tapAgainInstruction) {
-                tapAgainInstruction.style.opacity = '0';
-            }
-            
-            // Create stunning dispersal - particles burst outward from text
-            particles.forEach((p, i) => {
-                if (state.textParticleIndices.includes(i)) {
-                    // Text particles burst from their text positions
-                    const dx = p.x - state.textBounds.centerX;
-                    const dy = p.y - state.textBounds.centerY;
-                    const angle = Math.atan2(dy, dx);
-                    const force = Math.random() * 8 + 4;
-                    
-                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
-                    
-                    // Add rotation/spiral effect for fanciful dispersal
-                    const spiralForce = Math.random() * 3;
-                    p.vx += -Math.sin(angle) * spiralForce;
-                    p.vy += Math.cos(angle) * spiralForce;
-                } else if (p.isHeartParticle) {
-                    // Heart particles also burst out
-                    const dx = p.x - width / 2;
-                    const dy = p.y - height / 2;
-                    const angle = Math.atan2(dy, dx);
-                    const force = Math.random() * 6 + 3;
-                    
-                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
-                }
-            });
-            
-            // Show UI elements
-            document.getElementById('controls').classList.add('fade-in');
-            document.getElementById('top-msg').classList.add('fade-in');
-            const settingsPanel = document.getElementById('settings-panel');
-            settingsPanel.classList.remove('hidden');
-            settingsPanel.classList.add('fade-in');
-            settingsPanel.classList.add('visible');
-            
-            if (navigator.vibrate && isMobile) {
-                navigator.vibrate(50); // Strong feedback for phase transition
-            }
-            return;
+        // Hide birthday message
+        const birthdayMessage = document.getElementById('birthday-message');
+        if (birthdayMessage) {
+            birthdayMessage.style.opacity = '0';
         }
+        
+        // Create stunning dispersal - particles burst outward from heart
+        const centerX = width / 2;
+        const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
+        
+        particles.forEach((p, i) => {
+            const dx = p.x - centerX;
+            const dy = p.y - heartCenterY;
+            const angle = Math.atan2(dy, dx);
+            const force = Math.random() * 8 + 4;
+            
+            p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
+            p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+            
+            // Add rotation/spiral effect for fanciful dispersal
+            const spiralForce = Math.random() * 3;
+            p.vx += -Math.sin(angle) * spiralForce;
+            p.vy += Math.cos(angle) * spiralForce;
+        });
+        
+        // Show UI elements
+        document.getElementById('controls').classList.add('fade-in');
+        document.getElementById('top-msg').classList.add('fade-in');
+        const settingsPanel = document.getElementById('settings-panel');
+        settingsPanel.classList.remove('hidden');
+        settingsPanel.classList.add('fade-in');
+        settingsPanel.classList.add('visible');
+        
+        if (navigator.vibrate && isMobile) {
+            navigator.vibrate(50); // Strong feedback for game start
+        }
+        return;
     }
     
     if (!state.gameStarted) return;
@@ -825,75 +783,44 @@ canvas.addEventListener('mousemove', e => {
     }
 });
 canvas.addEventListener('mousedown', e => {
-    // Phase 1: First tap triggers heart formation
-    if (state.tapCount === 0) {
-        startHeartFormation();
-        return;
-    }
-    
-    // Phase 2: Second tap triggers text reveal
-    if (state.tapCount === 1 && state.heartFormed && !state.textForming && !state.textFormed) {
-        startTextFormation();
-        return;
-    }
-    
-    // Phase 3: Third tap on text disperses particles and activates interactive mode
-    if (state.tapCount === 2 && state.textFormed && !state.textBurst) {
-        // Check if click is within text bounds
-        const tapX = e.clientX;
-        const tapY = e.clientY;
+    // Simplified: Any click when heart is formed disperses particles and starts game
+    if (state.heartFormed && !state.gameStarted) {
+        state.gameStarted = true;
+        state.textBurst = true;
         
-        if (state.textBounds && 
-            tapX >= state.textBounds.minX && tapX <= state.textBounds.maxX &&
-            tapY >= state.textBounds.minY && tapY <= state.textBounds.maxY) {
-            
-            state.textBurst = true;
-            state.tapCount = 3;
-            state.gameStarted = true;
-            
-            // Hide tap again instruction if still visible
-            const tapAgainInstruction = document.getElementById('tap-again-instruction');
-            if (tapAgainInstruction) {
-                tapAgainInstruction.style.opacity = '0';
-            }
-            
-            // Create stunning dispersal - particles burst outward from text
-            particles.forEach((p, i) => {
-                if (state.textParticleIndices.includes(i)) {
-                    // Text particles burst from their text positions
-                    const dx = p.x - state.textBounds.centerX;
-                    const dy = p.y - state.textBounds.centerY;
-                    const angle = Math.atan2(dy, dx);
-                    const force = Math.random() * 8 + 4;
-                    
-                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
-                    
-                    // Add rotation/spiral effect for fanciful dispersal
-                    const spiralForce = Math.random() * 3;
-                    p.vx += -Math.sin(angle) * spiralForce;
-                    p.vy += Math.cos(angle) * spiralForce;
-                } else if (p.isHeartParticle) {
-                    // Heart particles also burst out
-                    const dx = p.x - width / 2;
-                    const dy = p.y - height / 2;
-                    const angle = Math.atan2(dy, dx);
-                    const force = Math.random() * 6 + 3;
-                    
-                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
-                }
-            });
-            
-            // Show UI elements
-            document.getElementById('controls').classList.add('fade-in');
-            document.getElementById('top-msg').classList.add('fade-in');
-            const settingsPanel = document.getElementById('settings-panel');
-            settingsPanel.classList.remove('hidden');
-            settingsPanel.classList.add('fade-in');
-            settingsPanel.classList.add('visible');
-            return;
+        // Hide birthday message
+        const birthdayMessage = document.getElementById('birthday-message');
+        if (birthdayMessage) {
+            birthdayMessage.style.opacity = '0';
         }
+        
+        // Create stunning dispersal - particles burst outward from heart
+        const centerX = width / 2;
+        const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
+        
+        particles.forEach((p, i) => {
+            const dx = p.x - centerX;
+            const dy = p.y - heartCenterY;
+            const angle = Math.atan2(dy, dx);
+            const force = Math.random() * 8 + 4;
+            
+            p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
+            p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+            
+            // Add rotation/spiral effect for fanciful dispersal
+            const spiralForce = Math.random() * 3;
+            p.vx += -Math.sin(angle) * spiralForce;
+            p.vy += Math.cos(angle) * spiralForce;
+        });
+        
+        // Show UI elements
+        document.getElementById('controls').classList.add('fade-in');
+        document.getElementById('top-msg').classList.add('fade-in');
+        const settingsPanel = document.getElementById('settings-panel');
+        settingsPanel.classList.remove('hidden');
+        settingsPanel.classList.add('fade-in');
+        settingsPanel.classList.add('visible');
+        return;
     }
     
     if (!state.gameStarted) return;
@@ -911,7 +838,7 @@ canvas.addEventListener('mousedown', e => {
  * UI CONTROLS
  */
 function initGame() {
-    // Phase 1: Start with clean black screen
+    // Simplified: Start with heart formation automatically
     state.tapCount = 0;
     state.heartForming = false;
     state.heartFormed = false;
@@ -920,10 +847,6 @@ function initGame() {
     state.textBurst = false;
     state.gameStarted = false;
     state.heartParticleIndices = [];
-    state.textParticleIndices = [];
-    state.particlesCirculating = false;
-    state.circulationAngle = 0;
-    state.textBounds = null;
     
     // Hide all UI elements initially
     document.getElementById('controls').classList.remove('fade-in');
@@ -934,12 +857,6 @@ function initGame() {
     document.getElementById('settings-panel').classList.add('hidden');
     document.getElementById('performance').classList.remove('visible');
     document.getElementById('performance').classList.add('hidden');
-    
-    // Show tap instruction
-    const tapInstruction = document.getElementById('tap-instruction');
-    if (tapInstruction) {
-        tapInstruction.style.opacity = '0.5';
-    }
     
     // Initialize particle count display (for when settings become available)
     const slider = document.getElementById('particle-slider');
@@ -953,8 +870,10 @@ function initGame() {
         particleCountDisplay.textContent = config.particleCount;
     }
     
-    // Particles start in random positions (not formed into shapes yet)
-    // formParticlesIntoTextAndHeart() will be called when tapCount reaches 1
+    // Auto-start heart formation on load
+    setTimeout(() => {
+        startHeartFormation();
+    }, 300); // Small delay to ensure canvas is ready
 }
 
 function toggleMode() {
@@ -1430,10 +1349,12 @@ function startHeartFormation() {
         state.heartParticleIndices.push(i);
     });
     
-    // Hide tap instruction
-    const tapInstruction = document.getElementById('tap-instruction');
-    if (tapInstruction) {
-        tapInstruction.style.opacity = '0';
+    // Show birthday message when heart forms
+    const birthdayMessage = document.getElementById('birthday-message');
+    if (birthdayMessage) {
+        // Position message at heart center
+        const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
+        birthdayMessage.style.top = heartCenterY + 'px';
     }
     
     // Check for animation completion after duration
@@ -1448,14 +1369,10 @@ function startHeartFormation() {
             p.animating = false;
         });
         
-        // Show "tap again" instruction for Phase 2 - centered in heart
-        const tapAgainInstruction = document.getElementById('tap-again-instruction');
-        if (tapAgainInstruction) {
-            // Position instruction at heart center (same as heart centerY)
-            const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
-            tapAgainInstruction.style.top = heartCenterY + 'px';
+        // Show birthday message text
+        if (birthdayMessage) {
             setTimeout(() => {
-                tapAgainInstruction.style.opacity = '0.5';
+                birthdayMessage.style.opacity = '0.9';
             }, 300); // Small delay for smooth transition
         }
     }, state.heartAnimationDuration);
