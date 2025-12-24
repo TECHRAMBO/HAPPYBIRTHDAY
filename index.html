@@ -653,7 +653,12 @@ const state = {
     heartForming: false, // Animation in progress
     heartFormed: false, // Heart formation complete
     heartAnimationStart: 0, // Timestamp when heart animation started
-    heartAnimationDuration: isMobile ? 900 : 1100 // Optimized speeds: faster on mobile, snappier on desktop
+    heartAnimationDuration: isMobile ? 900 : 1100, // Optimized speeds: faster on mobile, snappier on desktop
+    textForming: false, // Text formation animation in progress
+    textFormed: false, // Text formation complete
+    textAnimationStart: 0, // Timestamp when text animation started
+    textAnimationDuration: isMobile ? 1500 : 1800, // Text formation duration: 1.5-1.8s
+    heartParticleIndices: [] // Track which particles are part of heart outline (to keep them in place)
 };
 
 /**
@@ -698,6 +703,15 @@ canvas.addEventListener('touchstart', (e) => {
     // Phase 1: First tap triggers heart formation
     if (state.tapCount === 0) {
         startHeartFormation();
+        if (navigator.vibrate && isMobile) {
+            navigator.vibrate(20); // Subtle tap feedback
+        }
+        return;
+    }
+    
+    // Phase 2: Second tap triggers text reveal
+    if (state.tapCount === 1 && state.heartFormed && !state.textForming && !state.textFormed) {
+        startTextFormation();
         if (navigator.vibrate && isMobile) {
             navigator.vibrate(20); // Subtle tap feedback
         }
@@ -751,6 +765,12 @@ canvas.addEventListener('mousedown', e => {
         return;
     }
     
+    // Phase 2: Second tap triggers text reveal
+    if (state.tapCount === 1 && state.heartFormed && !state.textForming && !state.textFormed) {
+        startTextFormation();
+        return;
+    }
+    
     if (!state.gameStarted) return;
     
     // Burst text if it hasn't been burst yet
@@ -770,8 +790,11 @@ function initGame() {
     state.tapCount = 0;
     state.heartForming = false;
     state.heartFormed = false;
+    state.textForming = false;
+    state.textFormed = false;
     state.textBurst = false;
     state.gameStarted = false;
+    state.heartParticleIndices = [];
     
     // Hide all UI elements initially
     document.getElementById('controls').classList.remove('fade-in');
@@ -1010,6 +1033,7 @@ class Particle {
         this.startY = this.y;
         this.targetX = this.x;
         this.targetY = this.y;
+        this.isHeartParticle = false; // Track if particle is part of heart outline
     }
 
     update() {
@@ -1039,8 +1063,38 @@ class Particle {
             return;
         }
         
+        // Phase 2: Text formation animation
+        if (state.textForming && this.animating && !this.isHeartParticle) {
+            const elapsed = performance.now() - state.textAnimationStart;
+            const progress = Math.min(1, elapsed / state.textAnimationDuration);
+            
+            // Smooth easing for text formation (similar to heart)
+            const eased = isMobile 
+                ? (progress === 1 ? 1 : 1 - Math.pow(2, -8 * progress)) // Slightly slower exponential for smoother
+                : (1 - Math.pow(1 - progress, 3)); // Cubic for smooth desktop animation
+            
+            // Interpolate from current position (heart) to target position (text)
+            this.x = this.startX + (this.targetX - this.startX) * eased;
+            this.y = this.startY + (this.targetY - this.startY) * eased;
+            this.vx = 0;
+            this.vy = 0;
+            
+            // Animation complete
+            if (progress >= 1) {
+                this.animating = false;
+                this.x = this.targetX;
+                this.y = this.targetY;
+            }
+            return;
+        }
+        
+        // Keep heart particles locked in place during text formation
+        if (this.isHeartParticle && (state.textForming || (state.textFormed && !state.textBurst))) {
+            return; // Heart particles stay at their heart positions
+        }
+        
         // Heart formed but not burst yet - keep particles locked
-        if (state.heartFormed && !state.textBurst) {
+        if (state.heartFormed && !state.textBurst && state.tapCount < 3 && !state.textForming) {
             return; // Particles stay at their heart positions
         }
 
@@ -1101,8 +1155,11 @@ class Particle {
             return; // Don't draw particles until heart formation starts
         }
         
-        // Elegant white luminescent glow when heart is forming or formed (Phase 1)
-        if (state.heartForming || (state.heartFormed && !state.textBurst && state.tapCount < 3)) {
+        // Elegant white luminescent glow for heart particles and text particles (Phase 1 & 2)
+        if (state.heartForming || state.textForming || 
+            (state.heartFormed && !state.textBurst && state.tapCount < 3) ||
+            (state.textFormed && !state.textBurst && state.tapCount === 2)) {
+            
             // Enhanced HD glow effect - optimized for mobile (cleaner, prettier) and desktop (crisp)
             const glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
             const glowIntensity = isMobile ? 0.88 : 0.82; // Optimized intensity
@@ -1122,25 +1179,6 @@ class Particle {
             ctx.fillStyle = 'rgba(255, 255, 255, 1)';
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size * coreSize, 0, 6.283185307179586);
-            ctx.fill();
-            return;
-        }
-        
-        // Elegant white luminescent glow when in text formation mode (Hollow Knight SOUL meter aesthetic)
-        if (!state.textBurst && state.tapCount >= 2) {
-            // Refined ethereal glow effect - soft outer glow with bright core
-            ctx.shadowBlur = 18;
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * 1.15, 0, 6.283185307179586);
-            ctx.fill();
-            
-            // Bright core for clarity
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * 0.85, 0, 6.283185307179586);
             ctx.fill();
             return;
         }
@@ -1209,6 +1247,8 @@ function startHeartFormation() {
     });
     
     // Distribute particles to heart outline positions - optimized for clean, even distribution
+    // Track which particles are part of the heart outline (will be kept in place during Phase 2)
+    state.heartParticleIndices = [];
     const step = Math.max(1, Math.floor(heartPoints.length / particles.length));
     particles.forEach((p, i) => {
         // Evenly distribute particles around the heart outline
@@ -1219,6 +1259,8 @@ function startHeartFormation() {
         p.animating = true;
         p.vx = 0;
         p.vy = 0;
+        p.isHeartParticle = true; // Mark as heart particle
+        state.heartParticleIndices.push(i);
     });
     
     // Hide tap instruction
@@ -1250,6 +1292,111 @@ function startHeartFormation() {
             }, 300); // Small delay for smooth transition
         }
     }, state.heartAnimationDuration);
+}
+
+/**
+ * Start text formation animation (Phase 2)
+ */
+function startTextFormation() {
+    if (state.tapCount !== 1 || !state.heartFormed || state.textForming || state.textFormed) return;
+    
+    state.textForming = true;
+    state.textAnimationStart = performance.now();
+    
+    // Hide "tap again" instruction
+    const tapAgainInstruction = document.getElementById('tap-again-instruction');
+    if (tapAgainInstruction) {
+        tapAgainInstruction.style.opacity = '0';
+    }
+    
+    const text = "HAPPY\nBIRTHDAY\nHALIMA";
+    const lines = text.split('\n');
+    
+    // Calculate responsive font size
+    const baseFontSize = isMobile 
+        ? Math.min(width, height) * 0.08
+        : Math.min(width, height) * 0.10;
+    const fontSize = baseFontSize;
+    const lineHeight = fontSize * 1.3;
+    
+    // Create temporary canvas for text rendering
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Render text to get pixel data
+    tempCtx.fillStyle = 'white';
+    tempCtx.font = `600 ${fontSize}px 'Rajdhani', Arial, sans-serif`;
+    tempCtx.textAlign = 'center';
+    tempCtx.textBaseline = 'middle';
+    
+    // Calculate text block dimensions - position text below heart
+    const textWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width));
+    const textHeight = lines.length * lineHeight;
+    const centerX = width / 2;
+    // Position text below heart (heart is centered higher, so text goes below)
+    const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
+    const heartSize = Math.min(width, height) * (isMobile ? 0.30 : 0.32);
+    const textCenterY = heartCenterY + (heartSize * 0.5) + textHeight * 0.7; // Position text below heart
+    
+    // Draw text on temp canvas
+    lines.forEach((line, i) => {
+        const y = textCenterY - textHeight / 2 + (i + 0.5) * lineHeight;
+        tempCtx.fillText(line, centerX, y);
+    });
+    
+    // Get pixel data
+    const imageData = tempCtx.getImageData(0, 0, width, height);
+    const textPixels = [];
+    
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const index = (y * width + x) * 4;
+            const alpha = imageData.data[index + 3];
+            if (alpha > 128) {
+                textPixels.push({ x, y });
+            }
+        }
+    }
+    
+    if (textPixels.length === 0) return;
+    
+    // Get particles that are NOT heart particles (these will form text)
+    const textParticles = particles.filter((p, i) => !p.isHeartParticle);
+    
+    if (textParticles.length === 0) return;
+    
+    // Store current positions as start positions for animation
+    textParticles.forEach(p => {
+        p.startX = p.x;
+        p.startY = p.y;
+    });
+    
+    // Distribute text particles to text positions
+    const step = Math.max(1, Math.floor(textPixels.length / textParticles.length));
+    textParticles.forEach((p, i) => {
+        const pixelIndex = (i * step) % textPixels.length;
+        const pixel = textPixels[pixelIndex];
+        p.targetX = pixel.x;
+        p.targetY = pixel.y;
+        p.animating = true;
+        p.vx = 0;
+        p.vy = 0;
+    });
+    
+    // Check for animation completion after duration
+    setTimeout(() => {
+        state.textForming = false;
+        state.textFormed = true;
+        state.tapCount = 2;
+        // Lock all text particles at target positions
+        textParticles.forEach(p => {
+            p.x = p.targetX;
+            p.y = p.targetY;
+            p.animating = false;
+        });
+    }, state.textAnimationDuration);
 }
 
 /**
