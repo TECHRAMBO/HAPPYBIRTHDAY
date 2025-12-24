@@ -609,7 +609,7 @@ const config = {
     friction: 0.95,
     gravityStrength: isMobile ? 0.9 : 0.85, // Slightly stronger on mobile for better feel
     shockwaveForce: isMobile ? 60 : 55, // More pronounced on mobile
-    colorSpeed: 0.5, 
+    colorSpeed: 0.8, // Increased for more vibrant color cycling 
     trailLength: isMobile ? 0.08 : 0.15, // Reduced trail opacity on mobile for better performance
     targetFPS: isMobile ? 60 : 120,
     adaptiveQuality: isMobile ? true : false,
@@ -789,17 +789,23 @@ function setSlow(active) {
  * COLOR SCHEMES
  */
 const colorSchemes = {
-    neon: { baseHue: 200, saturation: 85, lightness: 50 },
-    fire: { baseHue: 15, saturation: 100, lightness: 55 },
-    ocean: { baseHue: 180, saturation: 80, lightness: 50 },
-    purple: { baseHue: 270, saturation: 70, lightness: 55 },
-    pink: { baseHue: 320, saturation: 90, lightness: 60 },
-    cyan: { baseHue: 190, saturation: 100, lightness: 50 }
+    neon: { baseHue: 200, saturation: 100, lightness: 55, hueRange: 60 },
+    fire: { baseHue: 15, saturation: 100, lightness: 60, hueRange: 40 },
+    ocean: { baseHue: 180, saturation: 95, lightness: 55, hueRange: 50 },
+    purple: { baseHue: 270, saturation: 95, lightness: 60, hueRange: 50 },
+    pink: { baseHue: 320, saturation: 100, lightness: 65, hueRange: 40 },
+    cyan: { baseHue: 190, saturation: 100, lightness: 55, hueRange: 60 }
 };
 
 function setColorScheme(scheme) {
     state.colorScheme = scheme;
     state.hue = colorSchemes[scheme].baseHue;
+    
+    // Update particle hue offsets to match new scheme for immediate vibrant color change
+    const newScheme = colorSchemes[scheme];
+    particles.forEach(p => {
+        p.hueOffset = (Math.random() - 0.5) * newScheme.hueRange;
+    });
     
     // Update UI
     document.querySelectorAll('.color-scheme-btn').forEach(btn => {
@@ -940,7 +946,9 @@ class Particle {
         this.vx = (Math.random() - 0.5) * 2;
         this.vy = (Math.random() - 0.5) * 2;
         this.size = Math.random() * 2 + 1; // Slightly larger for mobile visibility
-        this.hueOffset = Math.random() * 50; 
+        // Increased hue offset range for more vibrant color variation
+        const currentScheme = colorSchemes[state.colorScheme] || colorSchemes.neon;
+        this.hueOffset = (Math.random() - 0.5) * currentScheme.hueRange; 
     }
 
     update() {
@@ -995,13 +1003,23 @@ class Particle {
         const speed = Math.abs(this.vx) + Math.abs(this.vy);
         const scheme = colorSchemes[state.colorScheme];
         
-        // Optimized color calculation with bitwise rounding for performance
-        const hue = (state.hue + this.hueOffset + (speed * 8)) % 360;
-        const saturation = scheme.saturation;
-        const light = scheme.lightness + (speed * 5);
+        // Enhanced vibrant color calculation - increased multipliers for more intense colors
+        // Speed-based hue shift creates more dynamic, vibrant color transitions
+        const hueShift = speed * 12; // Increased from 8 for more vibrant color changes
+        const hue = (state.hue + this.hueOffset + hueShift) % 360;
+        
+        // Boost saturation based on speed for more intense fast particles
+        const baseSaturation = scheme.saturation;
+        const speedSaturationBoost = Math.min(10, speed * 0.8); // Up to 10% saturation boost
+        const saturation = Math.min(100, baseSaturation + speedSaturationBoost);
+        
+        // Enhanced lightness range - brighter colors with speed boost
+        const baseLightness = scheme.lightness;
+        const speedLightBoost = speed * 8; // Increased from 5 for brighter, more vibrant particles
+        const light = Math.min(85, baseLightness + speedLightBoost); // Cap at 85% for intensity
         
         // Optimized HSL string - removed spaces, use bitwise OR for integer conversion
-        ctx.fillStyle = `hsl(${hue|0},${saturation|0}%,${(light > 90 ? 90 : light)|0}%)`;
+        ctx.fillStyle = `hsl(${hue|0},${saturation|0}%,${light|0}%)`;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, 6.283185307179586); // 2*PI pre-calculated
         ctx.fill();
