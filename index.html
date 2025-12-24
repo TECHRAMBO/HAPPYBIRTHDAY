@@ -653,15 +653,15 @@ const state = {
     heartForming: false, // Animation in progress
     heartFormed: false, // Heart formation complete
     heartAnimationStart: 0, // Timestamp when heart animation started
-    heartAnimationDuration: isMobile ? 900 : 1100, // Optimized speeds: faster on mobile, snappier on desktop
+    heartAnimationDuration: isMobile ? 2000 : 2500, // Longer duration for grander effect: 2-2.5s
     textForming: false, // Text formation animation in progress
     textFormed: false, // Text formation complete
     textAnimationStart: 0, // Timestamp when text animation started
-    textAnimationDuration: isMobile ? 2500 : 3000, // Text formation duration: 2.5-3s (slower for smooth transition)
+    textAnimationDuration: isMobile ? 2000 : 2500, // Simple text formation: 2-2.5s
     heartParticleIndices: [], // Track which particles are part of heart outline
     textParticleIndices: [], // Track which particles form text
-    particlesCirculating: false, // Particles rotating around text after formation
-    circulationAngle: 0 // Angle for particle circulation around text
+    particlesCirculating: false, // Deprecated - removed circulation feature
+    circulationAngle: 0 // Deprecated - removed circulation feature
 };
 
 /**
@@ -721,48 +721,67 @@ canvas.addEventListener('touchstart', (e) => {
         return;
     }
     
-    // Phase 3: Third tap disperses particles and activates interactive mode
+    // Phase 3: Third tap on text disperses particles and activates interactive mode
     if (state.tapCount === 2 && state.textFormed && !state.textBurst) {
-        state.textBurst = true;
-        state.particlesCirculating = false;
-        state.tapCount = 3;
-        state.gameStarted = true;
+        // Check if tap is within text bounds
+        const tapX = e.touches ? e.touches[0].clientX : e.clientX;
+        const tapY = e.touches ? e.touches[0].clientY : e.clientY;
         
-        // Hide tap again instruction if still visible
-        const tapAgainInstruction = document.getElementById('tap-again-instruction');
-        if (tapAgainInstruction) {
-            tapAgainInstruction.style.opacity = '0';
-        }
-        
-        // Create stunning dispersal - particles burst outward
-        particles.forEach((p, i) => {
-            const dx = p.x - width / 2;
-            const dy = p.y - height / 2;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx);
-            const force = Math.random() * 8 + 4;
+        if (state.textBounds && 
+            tapX >= state.textBounds.minX && tapX <= state.textBounds.maxX &&
+            tapY >= state.textBounds.minY && tapY <= state.textBounds.maxY) {
             
-            p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-            p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+            state.textBurst = true;
+            state.tapCount = 3;
+            state.gameStarted = true;
             
-            // Add rotation/spiral effect for fanciful dispersal
-            const spiralForce = Math.random() * 3;
-            p.vx += -Math.sin(angle) * spiralForce;
-            p.vy += Math.cos(angle) * spiralForce;
-        });
-        
-        // Show UI elements
-        document.getElementById('controls').classList.add('fade-in');
-        document.getElementById('top-msg').classList.add('fade-in');
-        const settingsPanel = document.getElementById('settings-panel');
-        settingsPanel.classList.remove('hidden');
-        settingsPanel.classList.add('fade-in');
-        settingsPanel.classList.add('visible');
-        
-        if (navigator.vibrate && isMobile) {
-            navigator.vibrate(50); // Strong feedback for phase transition
+            // Hide tap again instruction if still visible
+            const tapAgainInstruction = document.getElementById('tap-again-instruction');
+            if (tapAgainInstruction) {
+                tapAgainInstruction.style.opacity = '0';
+            }
+            
+            // Create stunning dispersal - particles burst outward from text
+            particles.forEach((p, i) => {
+                if (state.textParticleIndices.includes(i)) {
+                    // Text particles burst from their text positions
+                    const dx = p.x - state.textBounds.centerX;
+                    const dy = p.y - state.textBounds.centerY;
+                    const angle = Math.atan2(dy, dx);
+                    const force = Math.random() * 8 + 4;
+                    
+                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
+                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+                    
+                    // Add rotation/spiral effect for fanciful dispersal
+                    const spiralForce = Math.random() * 3;
+                    p.vx += -Math.sin(angle) * spiralForce;
+                    p.vy += Math.cos(angle) * spiralForce;
+                } else if (p.isHeartParticle) {
+                    // Heart particles also burst out
+                    const dx = p.x - width / 2;
+                    const dy = p.y - height / 2;
+                    const angle = Math.atan2(dy, dx);
+                    const force = Math.random() * 6 + 3;
+                    
+                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
+                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+                }
+            });
+            
+            // Show UI elements
+            document.getElementById('controls').classList.add('fade-in');
+            document.getElementById('top-msg').classList.add('fade-in');
+            const settingsPanel = document.getElementById('settings-panel');
+            settingsPanel.classList.remove('hidden');
+            settingsPanel.classList.add('fade-in');
+            settingsPanel.classList.add('visible');
+            
+            if (navigator.vibrate && isMobile) {
+                navigator.vibrate(50); // Strong feedback for phase transition
+            }
+            return;
         }
-        return;
     }
     
     if (!state.gameStarted) return;
@@ -818,44 +837,63 @@ canvas.addEventListener('mousedown', e => {
         return;
     }
     
-    // Phase 3: Third tap disperses particles and activates interactive mode
+    // Phase 3: Third tap on text disperses particles and activates interactive mode
     if (state.tapCount === 2 && state.textFormed && !state.textBurst) {
-        state.textBurst = true;
-        state.particlesCirculating = false;
-        state.tapCount = 3;
-        state.gameStarted = true;
+        // Check if click is within text bounds
+        const tapX = e.clientX;
+        const tapY = e.clientY;
         
-        // Hide tap again instruction if still visible
-        const tapAgainInstruction = document.getElementById('tap-again-instruction');
-        if (tapAgainInstruction) {
-            tapAgainInstruction.style.opacity = '0';
+        if (state.textBounds && 
+            tapX >= state.textBounds.minX && tapX <= state.textBounds.maxX &&
+            tapY >= state.textBounds.minY && tapY <= state.textBounds.maxY) {
+            
+            state.textBurst = true;
+            state.tapCount = 3;
+            state.gameStarted = true;
+            
+            // Hide tap again instruction if still visible
+            const tapAgainInstruction = document.getElementById('tap-again-instruction');
+            if (tapAgainInstruction) {
+                tapAgainInstruction.style.opacity = '0';
+            }
+            
+            // Create stunning dispersal - particles burst outward from text
+            particles.forEach((p, i) => {
+                if (state.textParticleIndices.includes(i)) {
+                    // Text particles burst from their text positions
+                    const dx = p.x - state.textBounds.centerX;
+                    const dy = p.y - state.textBounds.centerY;
+                    const angle = Math.atan2(dy, dx);
+                    const force = Math.random() * 8 + 4;
+                    
+                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
+                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+                    
+                    // Add rotation/spiral effect for fanciful dispersal
+                    const spiralForce = Math.random() * 3;
+                    p.vx += -Math.sin(angle) * spiralForce;
+                    p.vy += Math.cos(angle) * spiralForce;
+                } else if (p.isHeartParticle) {
+                    // Heart particles also burst out
+                    const dx = p.x - width / 2;
+                    const dy = p.y - height / 2;
+                    const angle = Math.atan2(dy, dx);
+                    const force = Math.random() * 6 + 3;
+                    
+                    p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
+                    p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
+                }
+            });
+            
+            // Show UI elements
+            document.getElementById('controls').classList.add('fade-in');
+            document.getElementById('top-msg').classList.add('fade-in');
+            const settingsPanel = document.getElementById('settings-panel');
+            settingsPanel.classList.remove('hidden');
+            settingsPanel.classList.add('fade-in');
+            settingsPanel.classList.add('visible');
+            return;
         }
-        
-        // Create stunning dispersal - particles burst outward
-        particles.forEach((p, i) => {
-            const dx = p.x - width / 2;
-            const dy = p.y - height / 2;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(dy, dx);
-            const force = Math.random() * 8 + 4;
-            
-            p.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-            p.vy = Math.sin(angle) * force + (Math.random() - 0.5) * 2;
-            
-            // Add rotation/spiral effect for fanciful dispersal
-            const spiralForce = Math.random() * 3;
-            p.vx += -Math.sin(angle) * spiralForce;
-            p.vy += Math.cos(angle) * spiralForce;
-        });
-        
-        // Show UI elements
-        document.getElementById('controls').classList.add('fade-in');
-        document.getElementById('top-msg').classList.add('fade-in');
-        const settingsPanel = document.getElementById('settings-panel');
-        settingsPanel.classList.remove('hidden');
-        settingsPanel.classList.add('fade-in');
-        settingsPanel.classList.add('visible');
-        return;
     }
     
     if (!state.gameStarted) return;
@@ -1139,11 +1177,9 @@ class Particle {
             const elapsed = performance.now() - state.heartAnimationStart;
             const progress = Math.min(1, elapsed / state.heartAnimationDuration);
             
-            // Optimized easing function: smoother for desktop, snappier for mobile
-            // Use ease-out-cubic for smoother desktop, ease-out-expo for mobile
-            const eased = isMobile 
-                ? (progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress)) // Exponential for mobile
-                : (1 - Math.pow(1 - progress, 3)); // Cubic for smoother desktop
+            // Slower, smoother easing for grander heart formation effect
+            // Use ease-out-cubic for elegant, slower animation
+            const eased = 1 - Math.pow(1 - progress, 3); // Cubic easing for smooth, grander effect
             
             // Interpolate from start position to target position
             this.x = this.startX + (this.targetX - this.startX) * eased;
@@ -1160,35 +1196,18 @@ class Particle {
             return;
         }
         
-        // Phase 2: Text formation animation with swirl effect
+        // Phase 2: Simple text formation animation - direct from heart to text
         const particleIndex = particles.indexOf(this);
         if (state.textForming && this.animating && state.textParticleIndices.includes(particleIndex)) {
             const elapsed = performance.now() - state.textAnimationStart;
             const progress = Math.min(1, elapsed / state.textAnimationDuration);
             
-            // Smooth, slow easing for elegant transition
-            const eased = 1 - Math.pow(1 - progress, 2); // Ease-out-quad for smooth, slow transition
+            // Smooth easing for simple, elegant transition
+            const eased = 1 - Math.pow(1 - progress, 2); // Ease-out-quad
             
-            // Two-stage animation: swirl out from heart, then move to text
-            const swirlProgress = Math.min(1, progress * 1.5); // Swirl happens in first 2/3
-            const textProgress = Math.max(0, (progress - 0.4) / 0.6); // Text formation in last 60%
-            
-            let currentX, currentY;
-            
-            if (swirlProgress < 1) {
-                // Stage 1: Swirl out from heart position
-                const swirlEased = 1 - Math.pow(1 - swirlProgress, 2);
-                currentX = this.startX + (this.swirlX - this.startX) * swirlEased;
-                currentY = this.startY + (this.swirlY - this.startY) * swirlEased;
-            } else {
-                // Stage 2: Move from swirl position to text position
-                const textEased = textProgress < 0 ? 0 : 1 - Math.pow(1 - textProgress, 2);
-                currentX = this.swirlX + (this.targetX - this.swirlX) * textEased;
-                currentY = this.swirlY + (this.targetY - this.swirlY) * textEased;
-            }
-            
-            this.x = currentX;
-            this.y = currentY;
+            // Simple direct animation from heart to text
+            this.x = this.startX + (this.targetX - this.startX) * eased;
+            this.y = this.startY + (this.targetY - this.startY) * eased;
             this.vx = 0;
             this.vy = 0;
             
@@ -1201,29 +1220,13 @@ class Particle {
             return;
         }
         
-        // Phase 2: Particle circulation around text (after text formation, before burst)
-        if (state.particlesCirculating && state.textFormed && !state.textBurst && 
-            state.textParticleIndices.includes(particleIndex)) {
-            
-            // Rotate particles around their text positions
-            state.circulationAngle += 0.005; // Slow rotation speed
-            const angle = this.circulationAngle + state.circulationAngle;
-            const radius = this.circulationRadius || 0;
-            
-            if (state.textBounds && radius > 0) {
-                this.x = state.textBounds.centerX + Math.cos(angle) * radius;
-                this.y = state.textBounds.centerY + Math.sin(angle) * radius;
-            }
-            return;
-        }
-        
-        // Keep heart particles locked in place during text formation and circulation
+        // Keep heart particles locked in place during text formation
         if (this.isHeartParticle && (state.textForming || (state.textFormed && !state.textBurst))) {
             return; // Heart particles stay at their heart positions
         }
         
         // Text formed but not burst yet - keep text particles locked
-        if (state.textFormed && !state.textBurst && state.tapCount === 2 && !state.particlesCirculating) {
+        if (state.textFormed && !state.textBurst && state.tapCount === 2) {
             return; // Text particles stay at their text positions
         }
         
@@ -1287,7 +1290,7 @@ class Particle {
         // Elegant white luminescent glow for heart particles and text particles (Phase 1 & 2)
         if (state.heartForming || state.textForming || 
             (state.heartFormed && !state.textBurst && state.tapCount < 3) ||
-            (state.textFormed && !state.textBurst && (state.tapCount === 2 || state.particlesCirculating))) {
+            (state.textFormed && !state.textBurst && state.tapCount === 2)) {
             
             // Enhanced HD glow effect - optimized for mobile (cleaner, prettier) and desktop (crisp)
             const glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
@@ -1375,12 +1378,16 @@ function startHeartFormation() {
         p.startY = p.y;
     });
     
-    // Distribute ALL particles to heart outline positions - original heart formation
-    // Track which particles are part of the heart outline
+    // Distribute particles to heart with depth/filling for grander effect
+    // Use ~70% for outline, ~30% for interior filling
     state.heartParticleIndices = [];
-    const step = Math.max(1, Math.floor(heartPoints.length / particles.length));
-    particles.forEach((p, i) => {
-        // Evenly distribute particles around the heart outline
+    const outlineParticleCount = Math.floor(particles.length * 0.7);
+    const interiorParticleCount = particles.length - outlineParticleCount;
+    
+    // Fill heart outline with particles
+    const step = Math.max(1, Math.floor(heartPoints.length / outlineParticleCount));
+    for (let i = 0; i < outlineParticleCount; i++) {
+        const p = particles[i];
         const pointIndex = (i * step) % heartPoints.length;
         const point = heartPoints[pointIndex];
         p.targetX = point.x;
@@ -1388,9 +1395,24 @@ function startHeartFormation() {
         p.animating = true;
         p.vx = 0;
         p.vy = 0;
-        p.isHeartParticle = true; // All particles are part of heart initially
+        p.isHeartParticle = true;
         state.heartParticleIndices.push(i);
-    });
+    }
+    
+    // Fill heart interior with remaining particles for depth
+    for (let i = outlineParticleCount; i < particles.length; i++) {
+        const p = particles[i];
+        // Random positions inside heart (approximate interior)
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * heartSize * 0.4; // Interior radius
+        p.targetX = centerX + Math.cos(angle) * radius;
+        p.targetY = centerY + Math.sin(angle) * radius;
+        p.animating = true;
+        p.vx = 0;
+        p.vy = 0;
+        p.isHeartParticle = true;
+        state.heartParticleIndices.push(i);
+    }
     
     // Hide tap instruction
     const tapInstruction = document.getElementById('tap-instruction');
@@ -1425,7 +1447,7 @@ function startHeartFormation() {
 
 /**
  * Start text formation animation (Phase 2)
- * Particles swirl out from heart and form text with optimal density
+ * Simple: Particles disperse from heart directly to text positions
  */
 function startTextFormation() {
     if (state.tapCount !== 1 || !state.heartFormed || state.textForming || state.textFormed) return;
@@ -1495,12 +1517,12 @@ function startTextFormation() {
     }
     
     // Auto-adjust particle count for legible, clean text
-    // Optimal: ~0.3-0.5 particles per pixel for clean, readable text
+    // Optimal: ~0.35-0.4 particles per pixel for clean, readable text
     const optimalParticleCount = Math.floor(textPixels.length * (isMobile ? 0.35 : 0.4));
     const maxAvailableParticles = particles.length;
     const textParticleCount = Math.min(optimalParticleCount, maxAvailableParticles);
     
-    // Select particles to use for text (swirl out from heart)
+    // Select particles to use for text - use all particles (heart disperses into text)
     state.textParticleIndices = [];
     const particlesForText = [];
     
@@ -1514,15 +1536,10 @@ function startTextFormation() {
         p.isHeartParticle = false; // Remove from heart, will form text
     }
     
-    // Store current heart positions as start positions
+    // Store current heart positions as start positions (simple direct animation)
     particlesForText.forEach((p, i) => {
         p.startX = p.x;
         p.startY = p.y;
-        // Add swirl effect: particles spiral out from heart
-        const angle = (i / particlesForText.length) * Math.PI * 2;
-        const swirlOffset = 150; // Distance for swirl
-        p.swirlX = p.x + Math.cos(angle) * swirlOffset;
-        p.swirlY = p.y + Math.sin(angle) * swirlOffset;
     });
     
     // Distribute text particles to text positions with optimal density
@@ -1537,7 +1554,7 @@ function startTextFormation() {
         p.vy = 0;
     });
     
-    // Calculate text bounds for circulation after formation
+    // Calculate text bounds for click detection
     const textBounds = {
         minX: Math.min(...textPixels.map(p => p.x)),
         maxX: Math.max(...textPixels.map(p => p.x)),
@@ -1547,7 +1564,7 @@ function startTextFormation() {
         centerY: textCenterY
     };
     
-    // Store text bounds for circulation
+    // Store text bounds for click detection
     state.textBounds = textBounds;
     
     // Check for animation completion after duration
@@ -1555,21 +1572,14 @@ function startTextFormation() {
         state.textForming = false;
         state.textFormed = true;
         state.tapCount = 2;
-        state.particlesCirculating = true;
         
         // Lock text particles at target positions
         particlesForText.forEach(p => {
             p.x = p.targetX;
             p.y = p.targetY;
             p.animating = false;
-            // Store original text positions for circulation
-            p.textX = p.x;
+            p.textX = p.x; // Store text position
             p.textY = p.y;
-            // Calculate distance from text center for circulation
-            const dx = p.x - textBounds.centerX;
-            const dy = p.y - textBounds.centerY;
-            p.circulationRadius = Math.sqrt(dx * dx + dy * dy);
-            p.circulationAngle = Math.atan2(dy, dx);
         });
     }, state.textAnimationDuration);
 }
