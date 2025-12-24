@@ -636,7 +636,8 @@ const state = {
     targetFrameTime: 1000 / 60, // 60fps default
     adaptiveQualityCounter: 0,
     consecutiveLowFPS: 0,
-    consecutiveHighFPS: 0
+    consecutiveHighFPS: 0,
+    textBurst: false // Tracks if text has been burst by user interaction
 };
 
 /**
@@ -678,8 +679,14 @@ canvas.addEventListener('touchstart', (e) => {
     state.mouseY = e.touches[0].clientY;
     state.isTouching = true;
 
-    // Visual feedback - create shockwave on initial tap
-    createShockwave(state.mouseX, state.mouseY, 1.2); // Slightly stronger on mobile
+    // Burst text if it hasn't been burst yet
+    if (!state.textBurst) {
+        state.textBurst = true;
+        createShockwave(state.mouseX, state.mouseY, 2.5); // Strong burst to scatter particles
+    } else {
+        // Visual feedback - create shockwave on tap
+        createShockwave(state.mouseX, state.mouseY, 1.2); // Slightly stronger on mobile
+    }
     
     // Haptic feedback if available
     if (navigator.vibrate && isMobile) {
@@ -707,13 +714,23 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mousedown', e => {
     if (!state.gameStarted) return;
-    createShockwave(e.clientX, e.clientY, 1.0);
+    
+    // Burst text if it hasn't been burst yet
+    if (!state.textBurst) {
+        state.textBurst = true;
+        createShockwave(e.clientX, e.clientY, 2.5); // Strong burst to scatter particles
+    } else {
+        createShockwave(e.clientX, e.clientY, 1.0);
+    }
 });
 
 /**
  * UI CONTROLS
  */
 function initGame() {
+    // Reset text burst flag so text reforms on reload
+    state.textBurst = false;
+    
     // Splash screen removed - game starts immediately
     const splashScreen = document.getElementById('splash-screen');
     if (splashScreen) {
@@ -735,9 +752,11 @@ function initGame() {
     slider.value = config.particleCount;
     document.getElementById('particle-count-display').textContent = config.particleCount;
 
+    // Reform particles into text and heart after resetting textBurst
+    formParticlesIntoTextAndHeart();
+    
     setTimeout(() => {
         state.gameStarted = true;
-        createShockwave(width/2, height/2, 2.0); // Big Bang start
         
         // Show brief instruction hint on mobile
         if (isMobile) {
@@ -952,6 +971,11 @@ class Particle {
     }
 
     update() {
+        // If text hasn't been burst, keep particles locked in place
+        if (!state.textBurst) {
+            return; // Particles stay at their text/heart positions
+        }
+
         let targetX = state.mouseX;
         let targetY = state.mouseY;
 
@@ -999,6 +1023,19 @@ class Particle {
     }
 
     draw() {
+        // White luminescent glow when in text formation mode
+        if (!state.textBurst) {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 1.2, 0, 6.283185307179586);
+            ctx.fill();
+            ctx.shadowBlur = 0; // Reset shadow
+            return;
+        }
+
+        // Normal vibrant color rendering when burst
         // Optimized speed calculation
         const speed = Math.abs(this.vx) + Math.abs(this.vy);
         const scheme = colorSchemes[state.colorScheme];
@@ -1032,6 +1069,123 @@ function initParticles() {
     particles.length = 0;
     for (let i = 0; i < config.particleCount; i++) {
         particles.push(new Particle());
+    }
+    // Form particles into text and heart shape
+    formParticlesIntoTextAndHeart();
+}
+
+/**
+ * Generate heart shape outline positions
+ */
+function generateHeartOutline(centerX, centerY, size) {
+    const points = [];
+    const steps = 100; // Number of points along the heart curve
+    
+    for (let i = 0; i <= steps; i++) {
+        const t = (i / steps) * Math.PI * 2;
+        // Mathematical heart curve formula
+        const x = 16 * Math.pow(Math.sin(t), 3);
+        const y = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+        
+        // Scale and center
+        points.push({
+            x: centerX + (x * size / 16),
+            y: centerY + (y * size / 16)
+        });
+    }
+    
+    return points;
+}
+
+/**
+ * Form particles into text and heart shape
+ */
+function formParticlesIntoTextAndHeart() {
+    if (particles.length === 0) return;
+    
+    const text = "HAPPY\nBIRTHDAY\nHALIMA";
+    const lines = text.split('\n');
+    
+    // Calculate font size based on canvas dimensions
+    const baseFontSize = Math.min(width, height) * 0.12;
+    const fontSize = baseFontSize;
+    const lineHeight = fontSize * 1.4;
+    
+    // Create temporary canvas for text rendering
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Render text to get pixel data
+    tempCtx.fillStyle = 'white';
+    tempCtx.font = `bold ${fontSize}px Arial, sans-serif`;
+    tempCtx.textAlign = 'center';
+    tempCtx.textBaseline = 'middle';
+    
+    // Calculate text block dimensions
+    const textWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width));
+    const textHeight = lines.length * lineHeight;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    
+    // Draw text on temp canvas
+    lines.forEach((line, i) => {
+        const y = centerY - textHeight / 2 + (i + 0.5) * lineHeight;
+        tempCtx.fillText(line, centerX, y);
+    });
+    
+    // Get pixel data
+    const imageData = tempCtx.getImageData(0, 0, width, height);
+    const textPixels = [];
+    
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const index = (y * width + x) * 4;
+            const alpha = imageData.data[index + 3];
+            if (alpha > 128) { // Pixel is part of text
+                textPixels.push({ x, y });
+            }
+        }
+    }
+    
+    // Calculate heart size to encompass text with padding
+    const heartSize = Math.max(textWidth, textHeight) * 1.8;
+    const heartPoints = generateHeartOutline(centerX, centerY, heartSize);
+    
+    // Distribute particles: 75% for text, 25% for heart outline
+    const textParticleCount = Math.floor(particles.length * 0.75);
+    const heartParticleCount = particles.length - textParticleCount;
+    
+    // Assign text positions
+    if (textPixels.length > 0) {
+        const step = Math.max(1, Math.floor(textPixels.length / textParticleCount));
+        for (let i = 0; i < textParticleCount && i < particles.length; i++) {
+            const pixelIndex = (i * step) % textPixels.length;
+            const pixel = textPixels[pixelIndex];
+            particles[i].x = pixel.x;
+            particles[i].y = pixel.y;
+            particles[i].vx = 0;
+            particles[i].vy = 0;
+        }
+    }
+    
+    // Assign heart outline positions
+    if (heartPoints.length > 0 && heartParticleCount > 0) {
+        const step = Math.max(1, Math.floor(heartPoints.length / heartParticleCount));
+        for (let i = 0; i < heartParticleCount; i++) {
+            const particleIndex = textParticleCount + i;
+            if (particleIndex < particles.length) {
+                const pointIndex = (i * step) % heartPoints.length;
+                const point = heartPoints[pointIndex];
+                particles[particleIndex].x = point.x;
+                particles[particleIndex].y = point.y;
+                particles[particleIndex].vx = 0;
+                particles[particleIndex].vy = 0;
+                // Make heart particles slightly larger for visibility
+                particles[particleIndex].size = particles[particleIndex].size * 1.3;
+            }
+        }
     }
 }
 
