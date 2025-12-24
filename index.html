@@ -1352,9 +1352,12 @@ function startHeartFormation() {
     // Show birthday message when heart forms
     const birthdayMessage = document.getElementById('birthday-message');
     if (birthdayMessage) {
-        // Position message at heart center
+        // Position message slightly below heart center to fit within heart borders
         const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
-        birthdayMessage.style.top = heartCenterY + 'px';
+        const heartSize = Math.min(width, height) * (isMobile ? 0.30 : 0.32);
+        // Move text down by ~15% of heart size to fit within bottom border
+        const textOffset = heartSize * 0.15;
+        birthdayMessage.style.top = (heartCenterY + textOffset) + 'px';
     }
     
     // Check for animation completion after duration
