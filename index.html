@@ -593,6 +593,11 @@
             <span style="font-size:0.7rem">Motion</span>
         </div>
     </div>
+
+    <!-- Phase 1: Tap Instruction -->
+    <div id="tap-instruction" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.5); font-family: 'Rajdhani', sans-serif; font-size: clamp(0.9rem, 3vw, 1.2rem); letter-spacing: 3px; text-transform: uppercase; z-index: 15; pointer-events: none; transition: opacity 0.5s ease;">
+        tap
+    </div>
     
     <canvas id="canvas"></canvas>
 
@@ -637,7 +642,13 @@ const state = {
     adaptiveQualityCounter: 0,
     consecutiveLowFPS: 0,
     consecutiveHighFPS: 0,
-    textBurst: false // Tracks if text has been burst by user interaction
+    textBurst: false, // Tracks if text has been burst by user interaction
+    // Phase management
+    tapCount: 0, // 0 = initial, 1 = heart formed, 2 = text revealed, 3 = particles dispersed
+    heartForming: false, // Animation in progress
+    heartFormed: false, // Heart formation complete
+    heartAnimationStart: 0, // Timestamp when heart animation started
+    heartAnimationDuration: 2000 // 2 seconds for heart formation
 };
 
 /**
@@ -671,8 +682,18 @@ state.targetFrameTime = 1000 / config.targetFPS;
 
 // 1. Canvas Touch Interaction
 canvas.addEventListener('touchstart', (e) => {
-    if (!state.gameStarted) return;
     e.preventDefault();
+    
+    // Phase 1: First tap triggers heart formation
+    if (state.tapCount === 0) {
+        startHeartFormation();
+        if (navigator.vibrate && isMobile) {
+            navigator.vibrate(20); // Subtle tap feedback
+        }
+        return;
+    }
+    
+    if (!state.gameStarted) return;
     
     // Update position immediately
     state.mouseX = e.touches[0].clientX;
@@ -713,6 +734,12 @@ canvas.addEventListener('mousemove', e => {
     }
 });
 canvas.addEventListener('mousedown', e => {
+    // Phase 1: First tap triggers heart formation
+    if (state.tapCount === 0) {
+        startHeartFormation();
+        return;
+    }
+    
     if (!state.gameStarted) return;
     
     // Burst text if it hasn't been burst yet
@@ -728,49 +755,43 @@ canvas.addEventListener('mousedown', e => {
  * UI CONTROLS
  */
 function initGame() {
-    // Reset text burst flag so text reforms on reload
+    // Phase 1: Start with clean black screen
+    state.tapCount = 0;
+    state.heartForming = false;
+    state.heartFormed = false;
     state.textBurst = false;
+    state.gameStarted = false;
     
-    // Splash screen removed - game starts immediately
-    const splashScreen = document.getElementById('splash-screen');
-    if (splashScreen) {
-        splashScreen.classList.add('hidden');
+    // Hide all UI elements initially
+    document.getElementById('controls').classList.remove('fade-in');
+    document.getElementById('controls').classList.add('hidden');
+    document.getElementById('top-msg').classList.remove('fade-in');
+    document.getElementById('top-msg').classList.add('hidden');
+    document.getElementById('settings-panel').classList.remove('fade-in', 'visible');
+    document.getElementById('settings-panel').classList.add('hidden');
+    document.getElementById('performance').classList.remove('visible');
+    document.getElementById('performance').classList.add('hidden');
+    
+    // Show tap instruction
+    const tapInstruction = document.getElementById('tap-instruction');
+    if (tapInstruction) {
+        tapInstruction.style.opacity = '0.5';
     }
-    document.getElementById('controls').classList.add('fade-in');
-    document.getElementById('top-msg').classList.add('fade-in');
-
-    // Fix: Remove 'hidden' class and add both 'fade-in' and 'visible' for settings panel
-    const settingsPanel = document.getElementById('settings-panel');
-    settingsPanel.classList.remove('hidden');
-    settingsPanel.classList.add('fade-in');
-    settingsPanel.classList.add('visible'); // ADD THIS LINE
     
-    // Initialize particle count display
+    // Initialize particle count display (for when settings become available)
     const slider = document.getElementById('particle-slider');
-    slider.min = config.minParticleCount;
-    slider.max = config.maxParticleCount;
-    slider.value = config.particleCount;
-    document.getElementById('particle-count-display').textContent = config.particleCount;
-
-    // Reform particles into text and heart after resetting textBurst
-    formParticlesIntoTextAndHeart();
+    if (slider) {
+        slider.min = config.minParticleCount;
+        slider.max = config.maxParticleCount;
+        slider.value = config.particleCount;
+    }
+    const particleCountDisplay = document.getElementById('particle-count-display');
+    if (particleCountDisplay) {
+        particleCountDisplay.textContent = config.particleCount;
+    }
     
-    setTimeout(() => {
-        state.gameStarted = true;
-        
-        // Show brief instruction hint on mobile
-        if (isMobile) {
-            setTimeout(() => {
-                const msg = document.getElementById('top-msg');
-                if (msg) {
-                    msg.style.opacity = '0.9';
-                    setTimeout(() => {
-                        msg.style.opacity = '0.7';
-                    }, 3000);
-                }
-            }, 500);
-        }
-    }, 100);
+    // Particles start in random positions (not formed into shapes yet)
+    // formParticlesIntoTextAndHeart() will be called when tapCount reaches 1
 }
 
 function toggleMode() {
@@ -967,12 +988,47 @@ class Particle {
         this.size = Math.random() * 2 + 1; // Slightly larger for mobile visibility
         // Increased hue offset range for more vibrant color variation
         const currentScheme = colorSchemes[state.colorScheme] || colorSchemes.neon;
-        this.hueOffset = (Math.random() - 0.5) * currentScheme.hueRange; 
+        this.hueOffset = (Math.random() - 0.5) * currentScheme.hueRange;
+        
+        // Animation properties for phase transitions
+        this.animating = false;
+        this.startX = this.x;
+        this.startY = this.y;
+        this.targetX = this.x;
+        this.targetY = this.y;
     }
 
     update() {
+        // Phase 1: Heart formation animation
+        if (state.heartForming && this.animating) {
+            const elapsed = performance.now() - state.heartAnimationStart;
+            const progress = Math.min(1, elapsed / state.heartAnimationDuration);
+            
+            // Smooth easing function (ease-out-cubic)
+            const eased = 1 - Math.pow(1 - progress, 3);
+            
+            // Interpolate from start position to target position
+            this.x = this.startX + (this.targetX - this.startX) * eased;
+            this.y = this.startY + (this.targetY - this.startY) * eased;
+            this.vx = 0;
+            this.vy = 0;
+            
+            // Animation complete
+            if (progress >= 1) {
+                this.animating = false;
+                this.x = this.targetX;
+                this.y = this.targetY;
+            }
+            return;
+        }
+        
+        // Heart formed but not burst yet - keep particles locked
+        if (state.heartFormed && !state.textBurst) {
+            return; // Particles stay at their heart positions
+        }
+
         // If text hasn't been burst, keep particles locked in place
-        if (!state.textBurst) {
+        if (!state.textBurst && state.tapCount < 3) {
             return; // Particles stay at their text/heart positions
         }
 
@@ -1023,8 +1079,32 @@ class Particle {
     }
 
     draw() {
+        // Phase 1: Particles invisible before first tap
+        if (state.tapCount === 0 && !state.heartForming) {
+            return; // Don't draw particles until heart formation starts
+        }
+        
+        // Elegant white luminescent glow when heart is forming or formed (Phase 1)
+        if (state.heartForming || (state.heartFormed && !state.textBurst && state.tapCount < 3)) {
+            // Refined ethereal glow effect - soft outer glow with bright core
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 1.15, 0, 6.283185307179586);
+            ctx.fill();
+            
+            // Bright core for clarity
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 0.85, 0, 6.283185307179586);
+            ctx.fill();
+            return;
+        }
+        
         // Elegant white luminescent glow when in text formation mode (Hollow Knight SOUL meter aesthetic)
-        if (!state.textBurst) {
+        if (!state.textBurst && state.tapCount >= 2) {
             // Refined ethereal glow effect - soft outer glow with bright core
             ctx.shadowBlur = 18;
             ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
@@ -1077,8 +1157,63 @@ function initParticles() {
     for (let i = 0; i < config.particleCount; i++) {
         particles.push(new Particle());
     }
-    // Form particles into text and heart shape
-    formParticlesIntoTextAndHeart();
+    // Phase 1: Particles start in random positions, not formed into shapes yet
+    // Heart formation will be triggered on first tap
+}
+
+/**
+ * Start heart formation animation (Phase 1)
+ */
+function startHeartFormation() {
+    if (state.tapCount !== 0 || state.heartForming || state.heartFormed) return;
+    
+    state.heartForming = true;
+    state.heartAnimationStart = performance.now();
+    
+    // Calculate heart size - use a reasonable size for initial heart
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const heartSize = Math.min(width, height) * 0.4; // 40% of screen size
+    const heartPoints = generateHeartOutline(centerX, centerY, heartSize);
+    
+    if (heartPoints.length === 0) return;
+    
+    // Store current positions as start positions for animation
+    particles.forEach(p => {
+        p.startX = p.x;
+        p.startY = p.y;
+    });
+    
+    // Distribute particles to heart outline positions
+    const step = Math.max(1, Math.floor(heartPoints.length / particles.length));
+    particles.forEach((p, i) => {
+        const pointIndex = (i * step) % heartPoints.length;
+        const point = heartPoints[pointIndex];
+        p.targetX = point.x;
+        p.targetY = point.y;
+        p.animating = true;
+        p.vx = 0;
+        p.vy = 0;
+    });
+    
+    // Hide tap instruction
+    const tapInstruction = document.getElementById('tap-instruction');
+    if (tapInstruction) {
+        tapInstruction.style.opacity = '0';
+    }
+    
+    // Check for animation completion after duration
+    setTimeout(() => {
+        state.heartForming = false;
+        state.heartFormed = true;
+        state.tapCount = 1;
+        // Lock all particles at target positions
+        particles.forEach(p => {
+            p.x = p.targetX;
+            p.y = p.targetY;
+            p.animating = false;
+        });
+    }, state.heartAnimationDuration);
 }
 
 /**
