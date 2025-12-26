@@ -650,11 +650,13 @@ const state = {
     heartForming: false, // Animation in progress
     heartFormed: false, // Heart formation complete
     heartAnimationStart: 0, // Timestamp when heart animation started
-    heartAnimationDuration: isMobile ? 1800 : 2200, // Slower, more majestic timing: 1.8-2.2s for elegant formation
+    heartAnimationDuration: isMobile ? 1200 : 1500, // Faster formation: 1.2-1.5s
     textForming: false, // Text formation animation in progress
     textFormed: false, // Text formation complete
     textAnimationStart: 0, // Timestamp when text animation started
-    textAnimationDuration: isMobile ? 2000 : 2500, // Simple text formation: 2-2.5s
+    textAnimationDuration: isMobile ? 1200 : 1500, // Faster text formation: 1.2-1.5s
+    particlesSwirling: false, // Particles swirling around text
+    swirlStartTime: 0, // Timestamp when swirling started
     textRevealed: false, // Text reveal animation complete
     heartParticleIndices: [], // Track which particles are part of heart outline
     textParticleIndices: [], // Track which particles form text
@@ -711,10 +713,11 @@ state.targetFrameTime = 1000 / config.targetFPS;
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
-    // Tap when heart is formed: disperse particles and start game
-    if (state.heartFormed && !state.gameStarted) {
+    // Tap when text is formed: disperse particles and start game
+    if (state.textFormed && !state.gameStarted) {
         state.gameStarted = true;
         state.textBurst = true;
+        state.particlesSwirling = false;
         
         // Hide birthday message
         const birthdayMessage = document.getElementById('birthday-message');
@@ -796,10 +799,11 @@ canvas.addEventListener('mousemove', e => {
     }
 });
 canvas.addEventListener('mousedown', e => {
-    // Simplified: Any click when heart is formed disperses particles and starts game
-    if (state.heartFormed && !state.gameStarted) {
+    // Click when text is formed: disperse particles and start game
+    if (state.textFormed && !state.gameStarted) {
         state.gameStarted = true;
         state.textBurst = true;
+        state.particlesSwirling = false;
         
         // Hide birthday message
         const birthdayMessage = document.getElementById('birthday-message');
@@ -1113,6 +1117,14 @@ class Particle {
         this.flowDuration = 0; // Duration of flow for this particle
         this._flowOpacity = 1; // Opacity during flow (for dissolution)
         this._flowScale = 1; // Scale during flow
+        // Text particle properties for swirling
+        this.isTextParticle = false; // Track if particle is part of text
+        this.textBaseX = 0; // Base X position in text
+        this.textBaseY = 0; // Base Y position in text
+        this.textOffsetX = 0; // Offset from text center X
+        this.textOffsetY = 0; // Offset from text center Y
+        this.textOffsetDistance = 0; // Distance from text center
+        this.textOffsetAngle = 0; // Angle offset from text center
     }
 
     update() {
@@ -1247,16 +1259,16 @@ class Particle {
             return;
         }
         
-        // Phase 2: Simple text formation animation - direct from heart to text
+        // Phase 2: Text formation animation - particles move from heart to text positions
         const particleIndex = particles.indexOf(this);
         if (state.textForming && this.animating && state.textParticleIndices.includes(particleIndex)) {
             const elapsed = performance.now() - state.textAnimationStart;
             const progress = Math.min(1, elapsed / state.textAnimationDuration);
             
-            // Smooth easing for simple, elegant transition
-            const eased = 1 - Math.pow(1 - progress, 2); // Ease-out-quad
+            // Smooth easing for fast, elegant transition
+            const eased = 1 - Math.pow(1 - progress, 3); // Ease-out-cubic for faster animation
             
-            // Simple direct animation from heart to text
+            // Direct animation from heart to text
             this.x = this.startX + (this.targetX - this.startX) * eased;
             this.y = this.startY + (this.targetY - this.startY) * eased;
             this.vx = 0;
@@ -1271,14 +1283,49 @@ class Particle {
             return;
         }
         
+        // Particles swirling around text (lifelike motion)
+        if (state.particlesSwirling && this.isTextParticle && state.textFormed && !state.textBurst) {
+            const elapsed = performance.now() - state.swirlStartTime;
+            const time = elapsed / 1000; // Convert to seconds for smoother animation
+            
+            // Lifelike swirling: combination of orbital motion and gentle radius variation
+            const baseRadius = this.textOffsetDistance || 50;
+            const swirlSpeed = 0.5 + (this.textOffsetDistance / 200) * 0.3; // Variable speed based on distance
+            const angle = this.textOffsetAngle + time * swirlSpeed;
+            
+            // Gentle radius variation for lifelike motion (subtle pulsing)
+            const radiusVariation = Math.sin(time * 0.8 + this.textOffsetAngle) * 8;
+            const currentRadius = baseRadius + radiusVariation;
+            
+            // Add gentle vertical wave motion
+            const verticalWave = Math.sin(time * 1.2 + this.textOffsetAngle * 2) * 5;
+            
+            // Calculate position around text center
+            const swirlX = state.textCenterX + Math.cos(angle) * currentRadius;
+            const swirlY = state.textCenterY + Math.sin(angle) * currentRadius + verticalWave;
+            
+            this.x = swirlX;
+            this.y = swirlY;
+            
+            // Subtle velocity for smooth motion (will be used for glow effects)
+            const nextAngle = angle + 0.02;
+            const nextRadius = baseRadius + Math.sin((time + 0.02) * 0.8 + this.textOffsetAngle) * 8;
+            const nextX = state.textCenterX + Math.cos(nextAngle) * nextRadius;
+            const nextY = state.textCenterY + Math.sin(nextAngle) * nextRadius + Math.sin((time + 0.02) * 1.2 + this.textOffsetAngle * 2) * 5;
+            this.vx = (nextX - this.x) * 10;
+            this.vy = (nextY - this.y) * 10;
+            
+            return;
+        }
+        
         // Particle flow phase takes priority - don't block flowing particles
         if (state.particleFlowActive && this.isFlowing) {
             // Flow logic is handled above, just return here
             return;
         }
         
-        // Keep heart particles locked in place (except during flow)
-        if (this.isHeartParticle && state.heartFormed && !state.particleFlowActive && (state.textForming || (state.textFormed && !state.textBurst))) {
+        // Keep heart particles locked in place when heart is formed but text hasn't started
+        if (this.isHeartParticle && state.heartFormed && !state.textForming && !state.textFormed) {
             return; // Heart particles stay at their heart positions
         }
         
@@ -1391,10 +1438,11 @@ class Particle {
             return;
         }
         
-        // Elegant white luminescent glow for heart particles (before flow starts)
+        // Elegant white luminescent glow for heart particles and text particles
         if (state.heartForming || 
-            (state.heartFormed && !state.heartPulseComplete && this.isHeartParticle) ||
-            (state.heartFormed && !state.particleFlowActive && !state.textBurst && this.isHeartParticle)) {
+            (state.heartFormed && !state.textForming && !state.textFormed && !state.textBurst && this.isHeartParticle) ||
+            (state.textForming && this.animating && state.textParticleIndices.includes(particles.indexOf(this))) ||
+            (state.textFormed && !state.textBurst && this.isTextParticle)) {
             
             // Enhanced HD glow effect - optimized for mobile (cleaner, prettier) and desktop (crisp)
             let glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
@@ -1559,15 +1607,10 @@ function startHeartFormation() {
             p.animating = false;
         });
         
-        // Start heart pulse phase (300-400ms gentle pulse)
-        state.heartPulseStart = performance.now();
-        state.heartPulseComplete = false;
-        
-        // After pulse, start particle flow and text materialization
+        // Immediately start text formation - heart collapses into text
         setTimeout(() => {
-            state.heartPulseComplete = true;
-            startParticleFlowAndTextMaterialization();
-        }, state.heartPulseDuration);
+            startTextFormation();
+        }, 200); // Brief 200ms pause before collapsing
     }, state.heartAnimationDuration);
 }
 
@@ -1798,6 +1841,7 @@ function startTextFormation() {
         particlesForText.push(p);
         state.textParticleIndices.push(particleIndex);
         p.isHeartParticle = false; // Remove from heart, will form text
+        p.isTextParticle = true; // Mark as text particle
     }
     
     // Store current heart positions as start positions (simple direct animation)
@@ -1832,20 +1876,40 @@ function startTextFormation() {
     // Store text bounds for click detection
     state.textBounds = textBounds;
     
+    // Store text center for swirling
+    state.textCenterX = centerX;
+    state.textCenterY = textCenterY;
+    
     // Check for animation completion after duration
     setTimeout(() => {
         state.textForming = false;
         state.textFormed = true;
-        state.tapCount = 2;
         
-        // Lock text particles at target positions
+        // Lock text particles at target positions and prepare for swirling
         particlesForText.forEach(p => {
             p.x = p.targetX;
             p.y = p.targetY;
             p.animating = false;
-            p.textX = p.x; // Store text position
-            p.textY = p.y;
+            p.isTextParticle = true; // Mark as text particle
+            // Store base position for swirling
+            p.textBaseX = p.targetX;
+            p.textBaseY = p.targetY;
+            // Calculate offset from text center for swirling
+            p.textOffsetX = p.targetX - centerX;
+            p.textOffsetY = p.targetY - textCenterY;
+            p.textOffsetDistance = Math.sqrt(p.textOffsetX * p.textOffsetX + p.textOffsetY * p.textOffsetY);
+            p.textOffsetAngle = Math.atan2(p.textOffsetY, p.textOffsetX);
         });
+        
+        // Hide HTML text overlay
+        const birthdayMessage = document.getElementById('birthday-message');
+        if (birthdayMessage) {
+            birthdayMessage.style.opacity = '0';
+        }
+        
+        // Start swirling motion around text
+        state.particlesSwirling = true;
+        state.swirlStartTime = performance.now();
     }, state.textAnimationDuration);
 }
 
