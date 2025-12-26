@@ -595,9 +595,10 @@
     </div>
 
     <!-- Birthday Message in Center of Heart - Word by word reveal -->
-    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.4; opacity: 0;">
-        <span id="birthday-text-word1" style="opacity: 0;"></span> <span id="birthday-text-word2" style="opacity: 0;"></span><br>
-        <span id="birthday-text-word3" style="opacity: 0;"></span>
+    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.7; opacity: 0;">
+        <span id="birthday-text-word1" style="opacity: 0; display: block;"></span>
+        <span id="birthday-text-word2" style="opacity: 0; display: block;"></span>
+        <span id="birthday-text-word3" style="opacity: 0; display: block;"></span>
     </div>
     
     <canvas id="canvas"></canvas>
@@ -1411,8 +1412,8 @@ function startHeartFormation() {
 }
 
 /**
- * Start word-by-word text reveal animation - Simple and elegant
- * Each word appears one at a time: Happy -> Birthday -> Halima
+ * Start word-by-word text reveal animation - Elegant Wave Cascade
+ * Each word appears with smooth wave motion (translateY + scale) creating a cascade effect
  */
 function startTextRevealAnimation() {
     const birthdayMessage = document.getElementById('birthday-message');
@@ -1421,7 +1422,7 @@ function startTextRevealAnimation() {
     // Show the container
     birthdayMessage.style.opacity = '1';
     
-    // Text words - simple word-by-word reveal
+    // Text words - elegant wave cascade reveal
     const words = [
         { id: 'birthday-text-word1', text: 'Happy' },
         { id: 'birthday-text-word2', text: 'Birthday' },
@@ -1449,7 +1450,34 @@ function startTextRevealAnimation() {
             const glowBlur = isHalima ? 30 : 25; // HALIMA has stronger glow
             const glowSpread = isHalima ? 15 : 12; // HALIMA has wider aura
             
-            // Apply enhanced white glow with aura
+            // Initial state: below, scaled down, transparent, minimal glow
+            wordEl.style.transform = 'translateY(30px) scale(0.4)';
+            wordEl.style.opacity = '0';
+            wordEl.style.color = `rgba(255, 255, 255, 0)`;
+            
+            // Initial minimal glow (will build up during animation)
+            wordEl.style.textShadow = `
+                0 0 ${glowBlur}px rgba(255, 255, 255, 0),
+                0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, 0),
+                0 0 ${glowBlur * 2}px rgba(255, 255, 255, 0),
+                0 0 ${glowSpread}px rgba(255, 255, 255, 0),
+                0 2px 10px rgba(0, 0, 0, 0.8)
+            `;
+            
+            // Smooth wave cascade animation: translateY + scale + opacity + glow
+            // Using elegant cubic-bezier easing for fluid motion
+            wordEl.style.transition = 'transform 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94), text-shadow 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94), color 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+            
+            // Trigger animation by setting final state
+            // Force reflow to ensure initial state is applied first
+            wordEl.offsetHeight;
+            
+            // Final state: in position, full scale, fully visible, full glow
+            wordEl.style.transform = 'translateY(0) scale(1.0)';
+            wordEl.style.opacity = '1';
+            wordEl.style.color = `rgba(255, 255, 255, ${glowIntensity})`;
+            
+            // Final enhanced white glow with aura
             wordEl.style.textShadow = `
                 0 0 ${glowBlur}px rgba(255, 255, 255, ${glowIntensity}),
                 0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, ${glowIntensity * 0.8}),
@@ -1457,18 +1485,13 @@ function startTextRevealAnimation() {
                 0 0 ${glowSpread}px rgba(255, 255, 255, ${glowIntensity * 0.4}),
                 0 2px 10px rgba(0, 0, 0, 0.8)
             `;
-            wordEl.style.color = `rgba(255, 255, 255, ${glowIntensity})`;
-            
-            // Smooth fade-in animation with glow
-            wordEl.style.transition = 'opacity 0.8s ease-in, text-shadow 0.8s ease-in, color 0.8s ease-in';
-            wordEl.style.opacity = '1';
         }
         
         currentWord++;
         
-        // Minimal and subtle delay between words - longer for more elegance
+        // Elegant delay between words for wave cascade effect
         if (currentWord < words.length) {
-            setTimeout(revealNextWord, 600); // Increased from 400ms to 600ms for subtle delay
+            setTimeout(revealNextWord, 600); // 600ms delay creates smooth cascade rhythm
         }
     }
     
