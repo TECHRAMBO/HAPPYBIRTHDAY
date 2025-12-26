@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>POCKET FIREWORK: Mobile</title>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Satisfy&display=swap" rel="stylesheet">
     <style>
         :root {
             --neon-blue: #00f3ff;
@@ -594,9 +594,11 @@
         </div>
     </div>
 
-    <!-- Birthday Message in Center of Heart -->
-    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.9); font-family: 'Rajdhani', sans-serif; font-size: clamp(1rem, 4vw, 1.5rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.4; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity 1s ease;">
-        HAPPY<br>BIRTHDAY<br>HALIMA
+    <!-- Birthday Message in Center of Heart - Letter by letter reveal -->
+    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.95); font-family: 'Satisfy', cursive; font-size: clamp(1.2rem, 5vw, 2rem); text-align: center; z-index: 15; pointer-events: none; line-height: 1.6; text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 0 40px rgba(255, 255, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.8); opacity: 0; white-space: pre-wrap;">
+        <span id="birthday-text-line1"></span><br>
+        <span id="birthday-text-line2"></span><br>
+        <span id="birthday-text-line3"></span>
     </div>
     
     <canvas id="canvas"></canvas>
@@ -1380,17 +1382,90 @@ function startHeartFormation() {
             p.animating = false;
         });
         
-        // Show birthday message text
+        // Start letter-by-letter text reveal animation after a powerful pause
         if (birthdayMessage) {
             setTimeout(() => {
-                birthdayMessage.style.opacity = '0.9';
-            }, 300); // Small delay for smooth transition
+                startTextRevealAnimation();
+            }, 800); // Powerful pause: 800ms after heart formation completes
         }
     }, state.heartAnimationDuration);
 }
 
 /**
- * Start text formation animation (Phase 2)
+ * Start letter-by-letter text reveal animation (MAIN APPEAL)
+ * Sleek, powerful, Marauder's Map style cursive lettering
+ */
+function startTextRevealAnimation() {
+    const birthdayMessage = document.getElementById('birthday-message');
+    if (!birthdayMessage) return;
+    
+    // Show the container but keep text hidden initially
+    birthdayMessage.style.opacity = '1';
+    
+    // Text lines for letter-by-letter reveal
+    const textLines = [
+        'HAPPY',
+        'BIRTHDAY',
+        'HALIMA'
+    ];
+    
+    const lineElements = [
+        document.getElementById('birthday-text-line1'),
+        document.getElementById('birthday-text-line2'),
+        document.getElementById('birthday-text-line3')
+    ];
+    
+    // Clear initial content
+    lineElements.forEach(el => {
+        if (el) el.textContent = '';
+    });
+    
+    let currentLine = 0;
+    let currentChar = 0;
+    let charsPerReveal = Math.random() > 0.35 ? 1 : 2; // 65% chance of 2 chars for smoother reveal
+    
+    function revealNext() {
+        if (currentLine >= textLines.length) {
+            // Animation complete
+            return;
+        }
+        
+        const line = textLines[currentLine];
+        const lineEl = lineElements[currentLine];
+        
+        if (!lineEl) {
+            currentLine++;
+            currentChar = 0;
+            setTimeout(revealNext, 100); // Small delay between lines
+            return;
+        }
+        
+        // Reveal 1-2 characters at a time for elegant, powerful reveal
+        const charsToReveal = Math.min(charsPerReveal, line.length - currentChar);
+        const revealedText = line.substring(0, currentChar + charsToReveal);
+        lineEl.textContent = revealedText;
+        
+        currentChar += charsToReveal;
+        
+        // Check if line is complete
+        if (currentChar >= line.length) {
+            currentLine++;
+            currentChar = 0;
+            // Powerful pause between lines for dramatic effect (250ms)
+            setTimeout(revealNext, 250);
+        } else {
+            // Continue revealing characters - smooth, sleek timing
+            charsPerReveal = Math.random() > 0.35 ? 1 : 2; // 65% chance of 2 chars for faster, smoother reveal
+            setTimeout(revealNext, 100); // Smooth timing: 100ms per reveal for sleek animation
+        }
+    }
+    
+    // Start the animation
+    revealNext();
+}
+
+/**
+ * Start text formation animation (Phase 2) - DEPRECATED
  * Simple: Particles disperse from heart directly to text positions
  */
 function startTextFormation() {
