@@ -659,7 +659,17 @@ const state = {
     heartParticleIndices: [], // Track which particles are part of heart outline
     textParticleIndices: [], // Track which particles form text
     particlesCirculating: false, // Deprecated - removed circulation feature
-    circulationAngle: 0 // Deprecated - removed circulation feature
+    circulationAngle: 0, // Deprecated - removed circulation feature
+    // Particle Flow Magic state variables
+    particleFlowActive: false,        // Particle flow animation in progress
+    particleFlowStart: 0,              // Timestamp when particle flow started
+    particleFlowDuration: isMobile ? 1200 : 1500,  // Duration of particle flow phase
+    textMaterializeStart: 0,           // Timestamp when text materialization starts
+    textMaterializeDuration: isMobile ? 1200 : 1800, // Duration of text materialization
+    heartPulseComplete: false,         // Heart pulse/breath phase complete
+    flowingParticles: [],              // Track particles currently flowing
+    heartPulseStart: 0,                // Timestamp when heart pulse started
+    heartPulseDuration: 400            // Heart pulse duration (300-400ms)
 };
 
 /**
@@ -850,6 +860,12 @@ function initGame() {
     state.textBurst = false;
     state.gameStarted = false;
     state.heartParticleIndices = [];
+    // Reset particle flow magic state
+    state.particleFlowActive = false;
+    state.heartPulseComplete = false;
+    state.heartPulseStart = 0;
+    state.textRevealed = false;
+    state.flowingParticles = [];
     
     // Hide all UI elements initially
     document.getElementById('controls').classList.remove('fade-in');
@@ -1091,6 +1107,12 @@ class Particle {
         this.textY = this.y;
         this.circulationRadius = 0; // Distance from text center for circulation
         this.circulationAngle = 0; // Angle offset for circulation
+        // Particle flow properties
+        this.isFlowing = false; // Track if particle is currently flowing
+        this.flowStartTime = 0; // Timestamp when this particle started flowing
+        this.flowDuration = 0; // Duration of flow for this particle
+        this._flowOpacity = 1; // Opacity during flow (for dissolution)
+        this._flowScale = 1; // Scale during flow
     }
 
     update() {
@@ -1153,18 +1175,76 @@ class Particle {
             return;
         }
         
-        // Polish effect: Small gentle pulse when heart formation completes
-        if (state.heartFormed && !state.heartForming && this.isHeartParticle && !state.textRevealed) {
-            // Subtle pulsing glow effect for polish - particles slightly brighter for a moment
-            const timeSinceFormed = performance.now() - (state.heartAnimationStart + state.heartAnimationDuration);
-            if (timeSinceFormed < 600) {
-                // Subtle brightness pulse in first 600ms after formation
-                const pulseProgress = timeSinceFormed / 600;
-                const pulseIntensity = Math.sin(pulseProgress * Math.PI) * 0.15; // Gentle pulse
+        // Heart pulse/breath phase: Gentle pulse after heart formation completes
+        if (state.heartFormed && !state.heartForming && !state.heartPulseComplete && this.isHeartParticle) {
+            const timeSinceFormed = performance.now() - state.heartPulseStart;
+            if (timeSinceFormed < state.heartPulseDuration && state.heartPulseStart > 0) {
+                // Gentle pulse effect - particles glow slightly brighter
+                const pulseProgress = timeSinceFormed / state.heartPulseDuration;
+                const pulseIntensity = Math.sin(pulseProgress * Math.PI) * 0.2; // Gentle pulse (slightly stronger than before)
                 this._polishPulse = pulseIntensity; // Store for draw() function
             } else {
                 this._polishPulse = 0;
             }
+        }
+        
+        // Particle Flow Magic phase: Particles flow from heart outline toward text center
+        if (state.particleFlowActive && this.isHeartParticle && this.isFlowing) {
+            // Check if flow should have started
+            const now = performance.now();
+            if (now < this.flowStartTime) {
+                // Flow hasn't started yet for this particle, stay at heart position
+                return;
+            }
+            
+            const elapsed = now - this.flowStartTime;
+            const flowProgress = Math.min(1, elapsed / this.flowDuration);
+            
+            // Smooth easing for elegant flow motion
+            const eased = 1 - Math.pow(1 - flowProgress, 2.5); // Ease-out-exponential
+            
+            // Calculate curved path from heart position to text center
+            const startX = this.targetX; // Heart outline position (preserved from heart formation)
+            const startY = this.targetY;
+            const endX = width / 2; // Text center
+            const endY = height / 2 - (isMobile ? height * 0.08 : height * 0.1); // Text center Y
+            
+            // Elegant curved path using smooth sine wave for natural flow
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            const curveOffset = Math.sin(flowProgress * Math.PI) * 40; // Curved path offset
+            const perpAngle = Math.atan2(endY - startY, endX - startX) + Math.PI / 2;
+            const curveX = midX + Math.cos(perpAngle) * curveOffset;
+            const curveY = midY + Math.sin(perpAngle) * curveOffset;
+            
+            // Cubic bezier-like interpolation for smooth curve
+            const t = eased;
+            const mt = 1 - t;
+            const x = mt * mt * startX + 2 * mt * t * curveX + t * t * endX;
+            const y = mt * mt * startY + 2 * mt * t * curveY + t * t * endY;
+            
+            this.x = x;
+            this.y = y;
+            
+            // Dissolution: Fade out as particle approaches text center
+            const dissolveStart = 0.7; // Start dissolving at 70% progress
+            if (flowProgress > dissolveStart) {
+                const dissolveProgress = (flowProgress - dissolveStart) / (1 - dissolveStart);
+                this._flowOpacity = 1 - dissolveProgress; // Fade from 1 to 0
+            } else {
+                this._flowOpacity = 1;
+            }
+            
+            // Scale slightly during flow for dynamic effect
+            this._flowScale = 0.9 + (flowProgress * 0.1); // Slight scale increase
+            
+            // Flow complete - mark particle as done
+            if (flowProgress >= 1) {
+                this.isFlowing = false;
+                this._flowOpacity = 0; // Fully dissolved
+            }
+            
+            return;
         }
         
         // Phase 2: Simple text formation animation - direct from heart to text
@@ -1191,8 +1271,14 @@ class Particle {
             return;
         }
         
-        // Keep heart particles locked in place during text formation
-        if (this.isHeartParticle && (state.textForming || (state.textFormed && !state.textBurst))) {
+        // Particle flow phase takes priority - don't block flowing particles
+        if (state.particleFlowActive && this.isFlowing) {
+            // Flow logic is handled above, just return here
+            return;
+        }
+        
+        // Keep heart particles locked in place (except during flow)
+        if (this.isHeartParticle && state.heartFormed && !state.particleFlowActive && (state.textForming || (state.textFormed && !state.textBurst))) {
             return; // Heart particles stay at their heart positions
         }
         
@@ -1201,8 +1287,8 @@ class Particle {
             return; // Text particles stay at their text positions
         }
         
-        // Heart formed but text not yet formed - keep particles locked
-        if (state.heartFormed && !state.textForming && !state.textFormed && !state.textBurst && state.tapCount < 3) {
+        // Heart formed but text not yet formed - keep particles locked (unless flowing)
+        if (state.heartFormed && !state.particleFlowActive && !state.textForming && !state.textFormed && !state.textBurst && state.tapCount < 3) {
             return; // Particles stay at their positions (heart or near heart)
         }
 
@@ -1258,10 +1344,57 @@ class Particle {
             return; // Don't draw particles until heart formation starts
         }
         
-        // Elegant white luminescent glow for heart particles and text particles (Phase 1 & 2)
-        if (state.heartForming || state.textForming || 
-            (state.heartFormed && !state.textBurst && state.tapCount < 3) ||
-            (state.textFormed && !state.textBurst && state.tapCount === 2)) {
+        // Particle Flow Magic phase: Special rendering for flowing particles
+        if (state.particleFlowActive && this.isFlowing) {
+            // Use flow opacity for dissolution effect
+            const opacity = (this._flowOpacity !== undefined ? this._flowOpacity : 1);
+            const scale = (this._flowScale !== undefined ? this._flowScale : 1);
+            
+            // Enhanced glow during flow - particles glow brighter as they flow
+            let glowBlur = isMobile ? 24 : 30; // Slightly stronger glow during flow
+            let glowIntensity = Math.min(1, (isMobile ? 0.95 : 0.9) * opacity); // Bright glow, affected by opacity
+            
+            // Trail effect: Draw multiple particles behind for trail (simple but effective)
+            const trailSteps = 3;
+            for (let i = 1; i <= trailSteps; i++) {
+                const trailOpacity = opacity * (0.3 / i) * (1 - i / (trailSteps + 1));
+                const trailScale = scale * (1 - i * 0.1);
+                
+                // Estimate previous position (simplified - could be enhanced with position history)
+                const trailOffset = 5 * i;
+                const angle = Math.atan2(this.y - (this.targetY || this.y), this.x - (this.targetX || this.x));
+                const trailX = this.x - Math.cos(angle) * trailOffset;
+                const trailY = this.y - Math.sin(angle) * trailOffset;
+                
+                ctx.shadowBlur = glowBlur * trailScale * 0.8;
+                ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity * trailOpacity})`;
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.98 * trailOpacity})`;
+                ctx.beginPath();
+                ctx.arc(trailX, trailY, this.size * trailScale * 1.2, 0, 6.283185307179586);
+                ctx.fill();
+            }
+            
+            // Main particle with enhanced glow
+            ctx.shadowBlur = glowBlur * scale;
+            ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity})`;
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.98 * opacity})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * scale * 1.25, 0, 6.283185307179586);
+            ctx.fill();
+            
+            // Bright core
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = `rgba(255, 255, 255, ${1 * opacity})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * scale * 0.9, 0, 6.283185307179586);
+            ctx.fill();
+            return;
+        }
+        
+        // Elegant white luminescent glow for heart particles (before flow starts)
+        if (state.heartForming || 
+            (state.heartFormed && !state.heartPulseComplete && this.isHeartParticle) ||
+            (state.heartFormed && !state.particleFlowActive && !state.textBurst && this.isHeartParticle)) {
             
             // Enhanced HD glow effect - optimized for mobile (cleaner, prettier) and desktop (crisp)
             let glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
@@ -1284,6 +1417,30 @@ class Particle {
             ctx.fill();
             
             // Bright core for clarity and HD crispness
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * coreSize, 0, 6.283185307179586);
+            ctx.fill();
+            return;
+        }
+        
+        // Legacy text formation rendering (deprecated but keep for compatibility)
+        if (state.textForming || 
+            (state.textFormed && !state.textBurst && state.tapCount === 2)) {
+            
+            let glowBlur = isMobile ? 20 : 26;
+            let glowIntensity = isMobile ? 0.88 : 0.82;
+            const glowRadius = isMobile ? 1.15 : 1.25;
+            const coreSize = isMobile ? 0.92 : 0.87;
+            
+            ctx.shadowBlur = glowBlur;
+            ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity})`;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * glowRadius, 0, 6.283185307179586);
+            ctx.fill();
+            
             ctx.shadowBlur = 0;
             ctx.fillStyle = 'rgba(255, 255, 255, 1)';
             ctx.beginPath();
@@ -1402,101 +1559,133 @@ function startHeartFormation() {
             p.animating = false;
         });
         
-        // Start letter-by-letter text reveal animation after a powerful pause
-        if (birthdayMessage) {
-            setTimeout(() => {
-                startTextRevealAnimation();
-            }, 800); // Powerful pause: 800ms after heart formation completes
-        }
+        // Start heart pulse phase (300-400ms gentle pulse)
+        state.heartPulseStart = performance.now();
+        state.heartPulseComplete = false;
+        
+        // After pulse, start particle flow and text materialization
+        setTimeout(() => {
+            state.heartPulseComplete = true;
+            startParticleFlowAndTextMaterialization();
+        }, state.heartPulseDuration);
     }, state.heartAnimationDuration);
 }
 
 /**
- * Start word-by-word text reveal animation - Elegant Wave Cascade
- * Each word appears with smooth wave motion (translateY + scale) creating a cascade effect
+ * Start Particle Flow Magic and Text Materialization
+ * Particles flow from heart outline toward text center, text materializes word-by-word
  */
-function startTextRevealAnimation() {
+function startParticleFlowAndTextMaterialization() {
     const birthdayMessage = document.getElementById('birthday-message');
     if (!birthdayMessage) return;
     
-    // Show the container
+    // Show the container (initially transparent)
     birthdayMessage.style.opacity = '1';
     
-    // Text words - elegant wave cascade reveal
+    // Calculate text center position
+    const textCenterX = width / 2;
+    const textCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
+    
+    // Start particle flow phase
+    state.particleFlowActive = true;
+    state.particleFlowStart = performance.now();
+    state.flowingParticles = [];
+    
+    // Start text materialization slightly after particle flow begins
+    state.textMaterializeStart = state.particleFlowStart + (isMobile ? 300 : 400);
+    
+    // Initialize all heart particles for flow with staggered timing
+    const totalParticles = state.heartParticleIndices.length;
+    const staggerDuration = state.particleFlowDuration * 0.3; // Particles start flowing over 30% of duration
+    
+    state.heartParticleIndices.forEach((particleIndex, i) => {
+        const particle = particles[particleIndex];
+        if (!particle || !particle.isHeartParticle) return;
+        
+        // Stagger particle start times for cascading flow effect
+        const staggerProgress = i / totalParticles;
+        const startDelay = staggerProgress * staggerDuration;
+        
+        // Mark particle as flowing
+        particle.isFlowing = true;
+        particle.flowStartTime = state.particleFlowStart + startDelay;
+        particle.flowDuration = state.particleFlowDuration - startDelay; // Faster flow for later particles
+        
+        state.flowingParticles.push(particleIndex);
+    });
+    
+    // Start text materialization word-by-word
     const words = [
-        { id: 'birthday-text-word1', text: 'Happy' },
-        { id: 'birthday-text-word2', text: 'Birthday' },
-        { id: 'birthday-text-word3', text: 'Halima' }
+        { id: 'birthday-text-word1', text: 'Happy', materializeDelay: 0 },
+        { id: 'birthday-text-word2', text: 'Birthday', materializeDelay: isMobile ? 600 : 700 },
+        { id: 'birthday-text-word3', text: 'Halima', materializeDelay: isMobile ? 1200 : 1400 }
     ];
     
-    let currentWord = 0;
+    words.forEach((word, index) => {
+        setTimeout(() => {
+            materializeWord(word.id, word.text, index === words.length - 1);
+        }, state.textMaterializeStart - state.particleFlowStart + word.materializeDelay);
+    });
     
-    function revealNextWord() {
-        if (currentWord >= words.length) {
-            // Animation complete - all words revealed
-            state.textRevealed = true;
-            return;
-        }
+    // Complete animation after text materialization
+    setTimeout(() => {
+        state.textRevealed = true;
+        state.particleFlowActive = false;
         
-        const word = words[currentWord];
-        const wordEl = document.getElementById(word.id);
-        
-        if (wordEl) {
-            wordEl.textContent = word.text;
-            
-            // Enhanced glow/aura effect - stronger for HALIMA
-            const isHalima = word.text === 'Halima';
-            const glowIntensity = isHalima ? 1.0 : 0.9; // HALIMA is brightest
-            const glowBlur = isHalima ? 30 : 25; // HALIMA has stronger glow
-            const glowSpread = isHalima ? 15 : 12; // HALIMA has wider aura
-            
-            // Initial state: below, scaled down, transparent, minimal glow
-            wordEl.style.transform = 'translateY(30px) scale(0.4)';
-            wordEl.style.opacity = '0';
-            wordEl.style.color = `rgba(255, 255, 255, 0)`;
-            
-            // Initial minimal glow (will build up during animation)
-            wordEl.style.textShadow = `
-                0 0 ${glowBlur}px rgba(255, 255, 255, 0),
-                0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, 0),
-                0 0 ${glowBlur * 2}px rgba(255, 255, 255, 0),
-                0 0 ${glowSpread}px rgba(255, 255, 255, 0),
-                0 2px 10px rgba(0, 0, 0, 0.8)
-            `;
-            
-            // Smooth wave cascade animation: translateY + scale + opacity + glow
-            // Using elegant cubic-bezier easing for fluid motion
-            wordEl.style.transition = 'transform 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94), text-shadow 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94), color 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-            
-            // Trigger animation by setting final state
-            // Force reflow to ensure initial state is applied first
-            wordEl.offsetHeight;
-            
-            // Final state: in position, full scale, fully visible, full glow
-            wordEl.style.transform = 'translateY(0) scale(1.0)';
-            wordEl.style.opacity = '1';
-            wordEl.style.color = `rgba(255, 255, 255, ${glowIntensity})`;
-            
-            // Final enhanced white glow with aura
-            wordEl.style.textShadow = `
-                0 0 ${glowBlur}px rgba(255, 255, 255, ${glowIntensity}),
-                0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, ${glowIntensity * 0.8}),
-                0 0 ${glowBlur * 2}px rgba(255, 255, 255, ${glowIntensity * 0.6}),
-                0 0 ${glowSpread}px rgba(255, 255, 255, ${glowIntensity * 0.4}),
-                0 2px 10px rgba(0, 0, 0, 0.8)
-            `;
-        }
-        
-        currentWord++;
-        
-        // Elegant delay between words for wave cascade effect
-        if (currentWord < words.length) {
-            setTimeout(revealNextWord, 600); // 600ms delay creates smooth cascade rhythm
-        }
-    }
+        // Fade out remaining flowing particles
+        state.flowingParticles.forEach(particleIndex => {
+            const particle = particles[particleIndex];
+            if (particle && particle.isFlowing) {
+                particle.isFlowing = false;
+                particle._flowOpacity = 0;
+            }
+        });
+    }, state.textMaterializeStart - state.particleFlowStart + words[words.length - 1].materializeDelay + state.textMaterializeDuration);
+}
+
+/**
+ * Materialize a word with dynamic glow building
+ */
+function materializeWord(wordId, wordText, isLast) {
+    const wordEl = document.getElementById(wordId);
+    if (!wordEl) return;
     
-    // Start the animation after a small delay
-    setTimeout(revealNextWord, 300);
+    wordEl.textContent = wordText;
+    
+    // Enhanced glow/aura effect - stronger for HALIMA
+    const isHalima = wordText === 'Halima';
+    const glowIntensity = isHalima ? 1.0 : 0.9; // HALIMA is brightest
+    const glowBlur = isHalima ? 30 : 25; // HALIMA has stronger glow
+    const glowSpread = isHalima ? 15 : 12; // HALIMA has wider aura
+    
+    // Initial state: transparent, no glow
+    wordEl.style.opacity = '0';
+    wordEl.style.color = `rgba(255, 255, 255, 0)`;
+    wordEl.style.textShadow = `
+        0 0 ${glowBlur}px rgba(255, 255, 255, 0),
+        0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, 0),
+        0 0 ${glowBlur * 2}px rgba(255, 255, 255, 0),
+        0 0 ${glowSpread}px rgba(255, 255, 255, 0),
+        0 2px 10px rgba(0, 0, 0, 0.8)
+    `;
+    
+    // Smooth materialization animation with glow building
+    const duration = isLast ? state.textMaterializeDuration : state.textMaterializeDuration * 0.8;
+    wordEl.style.transition = `opacity ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), text-shadow ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), color ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`;
+    
+    // Force reflow to ensure initial state is applied
+    wordEl.offsetHeight;
+    
+    // Final state: fully visible with full glow
+    wordEl.style.opacity = '1';
+    wordEl.style.color = `rgba(255, 255, 255, ${glowIntensity})`;
+    wordEl.style.textShadow = `
+        0 0 ${glowBlur}px rgba(255, 255, 255, ${glowIntensity}),
+        0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, ${glowIntensity * 0.8}),
+        0 0 ${glowBlur * 2}px rgba(255, 255, 255, ${glowIntensity * 0.6}),
+        0 0 ${glowSpread}px rgba(255, 255, 255, ${glowIntensity * 0.4}),
+        0 2px 10px rgba(0, 0, 0, 0.8)
+    `;
 }
 
 /**
