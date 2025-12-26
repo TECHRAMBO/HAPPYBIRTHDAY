@@ -648,7 +648,7 @@ const state = {
     heartForming: false, // Animation in progress
     heartFormed: false, // Heart formation complete
     heartAnimationStart: 0, // Timestamp when heart animation started
-    heartAnimationDuration: isMobile ? 900 : 1100, // Original Phase 1 timing: faster and cleaner
+    heartAnimationDuration: isMobile ? 1800 : 2200, // Slower, more majestic timing: 1.8-2.2s for elegant formation
     textForming: false, // Text formation animation in progress
     textFormed: false, // Text formation complete
     textAnimationStart: 0, // Timestamp when text animation started
@@ -1091,19 +1091,19 @@ class Particle {
     }
 
     update() {
-        // Phase 1: Heart formation animation with swirl effect
+        // Phase 1: Heart formation animation with majestic swirl effect
         if (state.heartForming && this.animating) {
             const elapsed = performance.now() - state.heartAnimationStart;
             const progress = Math.min(1, elapsed / state.heartAnimationDuration);
             
-            // Smooth easing - use faster easing for original Phase 1 feel
-            const eased = isMobile 
-                ? (progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress)) // Exponential for mobile
-                : (1 - Math.pow(1 - progress, 3)); // Cubic for desktop
+            // Majestic easing: Smooth ease-out-exponential for elegant, graceful motion
+            // Starts fast, slows down gracefully as particles approach their target
+            const eased = progress === 1 ? 1 : 1 - Math.pow(2, -8 * progress); // Elegant exponential easing
             
-            // Add swirl: particles spiral inward as they approach heart outline
-            // Swirl intensity decreases as they get closer (more swirl at start, less at end)
-            const swirlIntensity = (1 - progress) * 0.4; // More intense swirl that fades
+            // Enhanced majestic swirl: Particles spiral inward with graceful elegance
+            // Swirl intensity peaks in the middle, creating a beautiful flow
+            const swirlProgress = Math.sin(progress * Math.PI); // Sin wave: 0 -> 1 -> 0 for elegant flow
+            const swirlIntensity = swirlProgress * 0.35; // Refined intensity for majestic motion
             const dx = this.targetX - this.startX;
             const dy = this.targetY - this.startY;
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1112,18 +1112,20 @@ class Particle {
             const angleToTarget = Math.atan2(dy, dx);
             const perpAngle = angleToTarget + Math.PI / 2;
             
-            // Calculate swirl offset - multiple rotations during animation
-            const swirlRotations = 1.5; // Number of full rotations
-            const swirlOffsetX = Math.cos(perpAngle + progress * Math.PI * 2 * swirlRotations) * swirlIntensity * dist * 0.5;
-            const swirlOffsetY = Math.sin(perpAngle + progress * Math.PI * 2 * swirlRotations) * swirlIntensity * dist * 0.5;
+            // Calculate majestic swirl offset - graceful rotations during animation
+            const swirlRotations = 2.0; // More rotations for majestic flow
+            // Use eased progress for swirl angle to match main animation timing
+            const swirlAngle = perpAngle + eased * Math.PI * 2 * swirlRotations;
+            const swirlOffsetX = Math.cos(swirlAngle) * swirlIntensity * dist * 0.6;
+            const swirlOffsetY = Math.sin(swirlAngle) * swirlIntensity * dist * 0.6;
             
-            // Interpolate from start to target with swirl
+            // Majestic interpolation: Smooth path with elegant swirl
             this.x = this.startX + (this.targetX - this.startX) * eased + swirlOffsetX;
             this.y = this.startY + (this.targetY - this.startY) * eased + swirlOffsetY;
             this.vx = 0;
             this.vy = 0;
             
-            // Animation complete
+            // Animation complete - ensure precise final position for HD quality
             if (progress >= 1) {
                 this.animating = false;
                 this.x = this.targetX;
@@ -1326,9 +1328,10 @@ function startHeartFormation() {
         p.targetX = point.x;
         p.targetY = point.y;
         
-        // Swirl start: particles start from a spiral pattern around center
-        const swirlAngle = (i / particles.length) * Math.PI * 4; // Multiple rotations for swirl
-        const swirlRadius = Math.min(width, height) * 0.6; // Start from outer area
+        // Majestic swirl start: particles start from an elegant spiral pattern around center
+        // More rotations for a more majestic, flowing appearance
+        const swirlAngle = (i / particles.length) * Math.PI * 6; // More rotations (6π) for majestic spiral
+        const swirlRadius = Math.min(width, height) * 0.65; // Slightly larger radius for grander entry
         p.startX = centerX + Math.cos(swirlAngle) * swirlRadius;
         p.startY = centerY + Math.sin(swirlAngle) * swirlRadius;
         
