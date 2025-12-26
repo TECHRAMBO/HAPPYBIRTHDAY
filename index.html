@@ -1096,14 +1096,23 @@ class Particle {
             const elapsed = performance.now() - state.heartAnimationStart;
             const progress = Math.min(1, elapsed / state.heartAnimationDuration);
             
-            // Majestic easing: Smooth ease-out-exponential for elegant, graceful motion
-            // Starts fast, slows down gracefully as particles approach their target
-            const eased = progress === 1 ? 1 : 1 - Math.pow(2, -8 * progress); // Elegant exponential easing
+            // Two-phase animation: Extended swirl phase, then assembly
+            // Phase 1 (0-0.55): Extended whoosh and swirl - particles swirl longer before assembly
+            // Phase 2 (0.55-1): Smooth assembly to heart shape
+            const swirlPhaseEnd = 0.55; // 55% of time spent swirling
+            const assemblyProgress = progress < swirlPhaseEnd ? 0 : (progress - swirlPhaseEnd) / (1 - swirlPhaseEnd);
+            const swirlProgress = progress < swirlPhaseEnd ? progress / swirlPhaseEnd : 1;
             
-            // Enhanced majestic swirl: Particles spiral inward with graceful elegance
-            // Swirl intensity peaks in the middle, creating a beautiful flow
-            const swirlProgress = Math.sin(progress * Math.PI); // Sin wave: 0 -> 1 -> 0 for elegant flow
-            const swirlIntensity = swirlProgress * 0.35; // Refined intensity for majestic motion
+            // Majestic easing for assembly phase: Smooth ease-out-exponential
+            const assemblyEased = assemblyProgress === 1 ? 1 : 1 - Math.pow(2, -8 * assemblyProgress);
+            
+            // Extended swirl phase: Particles whoosh and swirl longer
+            // Swirl intensity peaks in the middle of swirl phase, then decreases
+            const swirlIntensityCurve = Math.sin(swirlProgress * Math.PI); // Sin wave: 0 -> 1 -> 0
+            const swirlIntensity = progress < swirlPhaseEnd 
+                ? swirlIntensityCurve * 0.45  // Stronger swirl during extended phase
+                : (1 - assemblyProgress) * 0.25; // Decreasing swirl during assembly
+            
             const dx = this.targetX - this.startX;
             const dy = this.targetY - this.startY;
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1112,16 +1121,23 @@ class Particle {
             const angleToTarget = Math.atan2(dy, dx);
             const perpAngle = angleToTarget + Math.PI / 2;
             
-            // Calculate majestic swirl offset - graceful rotations during animation
-            const swirlRotations = 2.0; // More rotations for majestic flow
-            // Use eased progress for swirl angle to match main animation timing
-            const swirlAngle = perpAngle + eased * Math.PI * 2 * swirlRotations;
-            const swirlOffsetX = Math.cos(swirlAngle) * swirlIntensity * dist * 0.6;
-            const swirlOffsetY = Math.sin(swirlAngle) * swirlIntensity * dist * 0.6;
+            // Extended swirl rotations - particles swirl longer before assembly
+            const swirlRotations = progress < swirlPhaseEnd ? 2.5 : 1.0; // More rotations during swirl phase
+            const totalSwirlAngle = progress < swirlPhaseEnd 
+                ? perpAngle + swirlProgress * Math.PI * 2 * swirlRotations
+                : perpAngle + Math.PI * 2 * 2.5 + (1 - assemblyProgress) * Math.PI * 2 * 1.0;
             
-            // Majestic interpolation: Smooth path with elegant swirl
-            this.x = this.startX + (this.targetX - this.startX) * eased + swirlOffsetX;
-            this.y = this.startY + (this.targetY - this.startY) * eased + swirlOffsetY;
+            const swirlOffsetX = Math.cos(totalSwirlAngle) * swirlIntensity * dist * 0.7;
+            const swirlOffsetY = Math.sin(totalSwirlAngle) * swirlIntensity * dist * 0.7;
+            
+            // Position calculation: Swirl longer, then smooth assembly
+            const baseX = this.startX + (this.targetX - this.startX) * (progress < swirlPhaseEnd ? 0 : assemblyEased);
+            const baseY = this.startY + (this.targetY - this.startY) * (progress < swirlPhaseEnd ? 0 : assemblyEased);
+            
+            // During swirl phase, particles stay near start position with strong swirl
+            // During assembly, particles move toward target with decreasing swirl
+            this.x = baseX + swirlOffsetX;
+            this.y = baseY + swirlOffsetY;
             this.vx = 0;
             this.vy = 0;
             
@@ -1310,14 +1326,8 @@ function startHeartFormation() {
     
     if (heartPoints.length === 0) return;
     
-    // Store current positions as start positions for animation
-    particles.forEach(p => {
-        p.startX = p.x;
-        p.startY = p.y;
-    });
-    
     // Distribute ALL particles to heart outline only (original Phase 1 - clean outline)
-    // Add swirl effect: particles spiral into heart outline positions
+    // Add majestic swirl effect: particles spiral into heart outline positions
     state.heartParticleIndices = [];
     const step = Math.max(1, Math.floor(heartPoints.length / particles.length));
     
@@ -1335,15 +1345,10 @@ function startHeartFormation() {
         p.startX = centerX + Math.cos(swirlAngle) * swirlRadius;
         p.startY = centerY + Math.sin(swirlAngle) * swirlRadius;
         
-        // Store current position if particle was already positioned
-        if (!p.x || !p.y || isNaN(p.x) || isNaN(p.y)) {
-            p.x = p.startX;
-            p.y = p.startY;
-        } else {
-            // Use current position as start for smoother transition
-            p.startX = p.x;
-            p.startY = p.y;
-        }
+        // Ensure particles start from clean spiral positions (fix glitches on reload)
+        // Always use calculated start positions for consistency
+        p.x = p.startX;
+        p.y = p.startY;
         
         p.animating = true;
         p.vx = 0;
