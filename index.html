@@ -595,7 +595,7 @@
     </div>
 
     <!-- Birthday Message in Center of Heart - Word by word reveal -->
-    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.95); font-family: 'Playfair Display', serif; font-size: clamp(1.1rem, 4.5vw, 1.8rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.5; text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 0 40px rgba(255, 255, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.8); opacity: 0; white-space: pre-wrap;">
+    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.95); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.4; text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 0 40px rgba(255, 255, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.8); opacity: 0;">
         <span id="birthday-text-word1" style="opacity: 0;"></span> <span id="birthday-text-word2" style="opacity: 0;"></span><br>
         <span id="birthday-text-word3" style="opacity: 0;"></span>
     </div>
@@ -700,8 +700,8 @@ state.targetFrameTime = 1000 / config.targetFPS;
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
-    // Tap when text is revealed: disperse particles and start game
-    if (state.heartFormed && state.textRevealed && !state.gameStarted) {
+    // Tap when heart is formed: disperse particles and start game
+    if (state.heartFormed && !state.gameStarted) {
         state.gameStarted = true;
         state.textBurst = true;
         
@@ -1382,9 +1382,11 @@ function startHeartFormation() {
     // Show birthday message when heart forms - position at heart center
     const birthdayMessage = document.getElementById('birthday-message');
     if (birthdayMessage) {
-        // Position message at heart center to fit within heart borders
+        // Position message at heart center (centerX already handled by translate(-50%, -50%))
         const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
         birthdayMessage.style.top = heartCenterY + 'px';
+        birthdayMessage.style.left = '50%'; // Ensure proper centering
+        birthdayMessage.style.transform = 'translate(-50%, -50%)'; // Center horizontally and vertically
     }
     
     // Check for animation completion after duration
