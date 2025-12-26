@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>POCKET FIREWORK: Mobile</title>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Satisfy&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --neon-blue: #00f3ff;
@@ -594,11 +594,10 @@
         </div>
     </div>
 
-    <!-- Birthday Message in Center of Heart - Letter by letter reveal -->
-    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.95); font-family: 'Satisfy', cursive; font-size: clamp(1.2rem, 5vw, 2rem); text-align: center; z-index: 15; pointer-events: none; line-height: 1.6; text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 0 40px rgba(255, 255, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.8); opacity: 0; white-space: pre-wrap;">
-        <span id="birthday-text-line1"></span><br>
-        <span id="birthday-text-line2"></span><br>
-        <span id="birthday-text-line3"></span>
+    <!-- Birthday Message in Center of Heart - Word by word reveal -->
+    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255, 255, 255, 0.95); font-family: 'Playfair Display', serif; font-size: clamp(1.1rem, 4.5vw, 1.8rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.5; text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 0 40px rgba(255, 255, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.8); opacity: 0; white-space: pre-wrap;">
+        <span id="birthday-text-word1" style="opacity: 0;"></span> <span id="birthday-text-word2" style="opacity: 0;"></span><br>
+        <span id="birthday-text-word3" style="opacity: 0;"></span>
     </div>
     
     <canvas id="canvas"></canvas>
@@ -655,6 +654,7 @@ const state = {
     textFormed: false, // Text formation complete
     textAnimationStart: 0, // Timestamp when text animation started
     textAnimationDuration: isMobile ? 2000 : 2500, // Simple text formation: 2-2.5s
+    textRevealed: false, // Text reveal animation complete
     heartParticleIndices: [], // Track which particles are part of heart outline
     textParticleIndices: [], // Track which particles form text
     particlesCirculating: false, // Deprecated - removed circulation feature
@@ -700,8 +700,8 @@ state.targetFrameTime = 1000 / config.targetFPS;
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
-    // Simplified: Any tap when heart is formed disperses particles and starts game
-    if (state.heartFormed && !state.gameStarted) {
+    // Tap when text is revealed: disperse particles and start game
+    if (state.heartFormed && state.textRevealed && !state.gameStarted) {
         state.gameStarted = true;
         state.textBurst = true;
         
@@ -1152,6 +1152,20 @@ class Particle {
             return;
         }
         
+        // Polish effect: Small gentle pulse when heart formation completes
+        if (state.heartFormed && !state.heartForming && this.isHeartParticle && !state.textRevealed) {
+            // Subtle pulsing glow effect for polish - particles slightly brighter for a moment
+            const timeSinceFormed = performance.now() - (state.heartAnimationStart + state.heartAnimationDuration);
+            if (timeSinceFormed < 600) {
+                // Subtle brightness pulse in first 600ms after formation
+                const pulseProgress = timeSinceFormed / 600;
+                const pulseIntensity = Math.sin(pulseProgress * Math.PI) * 0.15; // Gentle pulse
+                this._polishPulse = pulseIntensity; // Store for draw() function
+            } else {
+                this._polishPulse = 0;
+            }
+        }
+        
         // Phase 2: Simple text formation animation - direct from heart to text
         const particleIndex = particles.indexOf(this);
         if (state.textForming && this.animating && state.textParticleIndices.includes(particleIndex)) {
@@ -1249,10 +1263,16 @@ class Particle {
             (state.textFormed && !state.textBurst && state.tapCount === 2)) {
             
             // Enhanced HD glow effect - optimized for mobile (cleaner, prettier) and desktop (crisp)
-            const glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
-            const glowIntensity = isMobile ? 0.88 : 0.82; // Optimized intensity
+            let glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
+            let glowIntensity = isMobile ? 0.88 : 0.82; // Optimized intensity
             const glowRadius = isMobile ? 1.15 : 1.25; // Slightly tighter glow on mobile
             const coreSize = isMobile ? 0.92 : 0.87; // Larger core on mobile for better visibility
+            
+            // Polish effect: Slightly enhanced glow when heart just formed (subtle pulse)
+            if (this._polishPulse && this._polishPulse > 0) {
+                glowBlur += this._polishPulse * 8; // Slightly larger glow
+                glowIntensity = Math.min(1, glowIntensity + this._polishPulse); // Slightly brighter
+            }
             
             // Refined ethereal glow effect - soft outer glow with bright core
             ctx.shadowBlur = glowBlur;
@@ -1359,15 +1379,12 @@ function startHeartFormation() {
         state.heartParticleIndices.push(i);
     });
     
-    // Show birthday message when heart forms
+    // Show birthday message when heart forms - position at heart center
     const birthdayMessage = document.getElementById('birthday-message');
     if (birthdayMessage) {
-        // Position message slightly below heart center to fit within heart borders
+        // Position message at heart center to fit within heart borders
         const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
-        const heartSize = Math.min(width, height) * (isMobile ? 0.30 : 0.32);
-        // Move text down by ~15% of heart size to fit within bottom border
-        const textOffset = heartSize * 0.15;
-        birthdayMessage.style.top = (heartCenterY + textOffset) + 'px';
+        birthdayMessage.style.top = heartCenterY + 'px';
     }
     
     // Check for animation completion after duration
@@ -1392,76 +1409,52 @@ function startHeartFormation() {
 }
 
 /**
- * Start letter-by-letter text reveal animation (MAIN APPEAL)
- * Sleek, powerful, Marauder's Map style cursive lettering
+ * Start word-by-word text reveal animation - Simple and elegant
+ * Each word appears one at a time: Happy -> Birthday -> Halima
  */
 function startTextRevealAnimation() {
     const birthdayMessage = document.getElementById('birthday-message');
     if (!birthdayMessage) return;
     
-    // Show the container but keep text hidden initially
+    // Show the container
     birthdayMessage.style.opacity = '1';
     
-    // Text lines for letter-by-letter reveal
-    const textLines = [
-        'HAPPY',
-        'BIRTHDAY',
-        'HALIMA'
+    // Text words - simple word-by-word reveal
+    const words = [
+        { id: 'birthday-text-word1', text: 'Happy' },
+        { id: 'birthday-text-word2', text: 'Birthday' },
+        { id: 'birthday-text-word3', text: 'Halima' }
     ];
     
-    const lineElements = [
-        document.getElementById('birthday-text-line1'),
-        document.getElementById('birthday-text-line2'),
-        document.getElementById('birthday-text-line3')
-    ];
+    let currentWord = 0;
     
-    // Clear initial content
-    lineElements.forEach(el => {
-        if (el) el.textContent = '';
-    });
-    
-    let currentLine = 0;
-    let currentChar = 0;
-    let charsPerReveal = Math.random() > 0.35 ? 1 : 2; // 65% chance of 2 chars for smoother reveal
-    
-    function revealNext() {
-        if (currentLine >= textLines.length) {
-            // Animation complete
+    function revealNextWord() {
+        if (currentWord >= words.length) {
+            // Animation complete - all words revealed
+            state.textRevealed = true;
             return;
         }
         
-        const line = textLines[currentLine];
-        const lineEl = lineElements[currentLine];
+        const word = words[currentWord];
+        const wordEl = document.getElementById(word.id);
         
-        if (!lineEl) {
-            currentLine++;
-            currentChar = 0;
-            setTimeout(revealNext, 100); // Small delay between lines
-            return;
+        if (wordEl) {
+            wordEl.textContent = word.text;
+            // Simple fade-in animation
+            wordEl.style.transition = 'opacity 0.6s ease-in';
+            wordEl.style.opacity = '1';
         }
         
-        // Reveal 1-2 characters at a time for elegant, powerful reveal
-        const charsToReveal = Math.min(charsPerReveal, line.length - currentChar);
-        const revealedText = line.substring(0, currentChar + charsToReveal);
-        lineEl.textContent = revealedText;
+        currentWord++;
         
-        currentChar += charsToReveal;
-        
-        // Check if line is complete
-        if (currentChar >= line.length) {
-            currentLine++;
-            currentChar = 0;
-            // Powerful pause between lines for dramatic effect (250ms)
-            setTimeout(revealNext, 250);
-        } else {
-            // Continue revealing characters - smooth, sleek timing
-            charsPerReveal = Math.random() > 0.35 ? 1 : 2; // 65% chance of 2 chars for faster, smoother reveal
-            setTimeout(revealNext, 100); // Smooth timing: 100ms per reveal for sleek animation
+        // Pause before next word appears (400ms for elegant spacing)
+        if (currentWord < words.length) {
+            setTimeout(revealNextWord, 400);
         }
     }
     
-    // Start the animation
-    revealNext();
+    // Start the animation after a small delay
+    setTimeout(revealNextWord, 300);
 }
 
 /**
