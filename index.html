@@ -768,18 +768,20 @@ canvas.addEventListener('touchstart', (e) => {
     
     if (!state.gameStarted) return;
     
-    // Update position immediately
-    state.mouseX = e.touches[0].clientX;
-    state.mouseY = e.touches[0].clientY;
+    // Update position immediately and capture touch coordinates
+    const touchX = e.touches[0].clientX;
+    const touchY = e.touches[0].clientY;
+    state.mouseX = touchX;
+    state.mouseY = touchY;
     state.isTouching = true;
 
     // Burst text if it hasn't been burst yet
     if (!state.textBurst) {
         state.textBurst = true;
-        createShockwave(state.mouseX, state.mouseY, 2.5); // Strong burst to scatter particles
+        createShockwave(touchX, touchY, 2.5); // Strong burst to scatter particles
     } else {
-        // Visual feedback - create shockwave on tap
-        createShockwave(state.mouseX, state.mouseY, 1.2); // Slightly stronger on mobile
+        // Visual feedback - create shockwave on tap (equalized with desktop)
+        createShockwave(touchX, touchY, 1.2);
     }
     
     // Haptic feedback if available
@@ -791,22 +793,42 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
     if (!state.gameStarted) return;
     e.preventDefault(); // Prevent scrolling
-    state.mouseX = e.touches[0].clientX;
-    state.mouseY = e.touches[0].clientY;
+    // Update position immediately for smooth tracking (equal to mousemove)
+    const touchX = e.touches[0].clientX;
+    const touchY = e.touches[0].clientY;
+    state.mouseX = touchX;
+    state.mouseY = touchY;
+    
+    // Create continuous shockwaves while dragging for better feel (equal to desktop mouse interaction)
+    if (state.isTouching) {
+        createShockwave(touchX, touchY, 0.3); // Subtle continuous effect while dragging
+    }
 }, { passive: false });
 
 canvas.addEventListener('touchend', (e) => {
     state.isTouching = false;
 });
 
-// 2. Mouse Interaction (Fallback for desktop)
+// 2. Mouse Interaction (Desktop)
 canvas.addEventListener('mousemove', e => {
     if (state.gameStarted) {
-        state.mouseX = e.clientX;
-        state.mouseY = e.clientY;
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+        state.mouseX = mouseX;
+        state.mouseY = mouseY;
+        
+        // Create continuous subtle shockwaves while mouse is down (equal to touch)
+        if (state.isTouching) {
+            createShockwave(mouseX, mouseY, 0.3); // Subtle continuous effect while dragging
+        }
     }
 });
+
 canvas.addEventListener('mousedown', e => {
+    // Set touching state (equal to touch)
+    state.isTouching = true;
+    state.mouseX = e.clientX;
+    state.mouseY = e.clientY;
     // Click when text is formed: disperse particles and start game
     if (state.textRevealed && !state.gameStarted) {
         state.gameStarted = true;
@@ -850,13 +872,25 @@ canvas.addEventListener('mousedown', e => {
     
     if (!state.gameStarted) return;
     
+    // Update position
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+    state.mouseX = mouseX;
+    state.mouseY = mouseY;
+    
     // Burst text if it hasn't been burst yet
     if (!state.textBurst) {
         state.textBurst = true;
-        createShockwave(e.clientX, e.clientY, 2.5); // Strong burst to scatter particles
+        createShockwave(mouseX, mouseY, 2.5); // Strong burst to scatter particles
     } else {
-        createShockwave(e.clientX, e.clientY, 1.0);
+        // Equalized with touch - same multiplier
+        createShockwave(mouseX, mouseY, 1.2);
     }
+});
+
+canvas.addEventListener('mouseup', e => {
+    // Release touching state (equal to touch)
+    state.isTouching = false;
 });
 
 /**
