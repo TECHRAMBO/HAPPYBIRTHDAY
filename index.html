@@ -520,27 +520,48 @@
             }
         }
 
-        /* Bloom fade-in animation for birthday text */
+        /* Bloom fade-in animation for birthday text - enhanced */
         @keyframes textBloomFadeIn {
             0% {
                 opacity: 0;
-                transform: translate(-50%, -50%) scale(0.3);
-                filter: blur(10px);
+                transform: translate(-50%, -50%) scale(0.2);
+                filter: blur(15px);
             }
-            60% {
-                opacity: 0.8;
-                transform: translate(-50%, -50%) scale(1.05);
-                filter: blur(2px);
+            40% {
+                opacity: 0.3;
+                transform: translate(-50%, -50%) scale(0.7);
+                filter: blur(8px);
+            }
+            70% {
+                opacity: 0.6;
+                transform: translate(-50%, -50%) scale(1.08);
+                filter: blur(3px);
             }
             100% {
-                opacity: 1;
+                opacity: 0.65;
                 transform: translate(-50%, -50%) scale(1);
                 filter: blur(0px);
             }
         }
 
         .text-bloom-fade-in {
-            animation: textBloomFadeIn 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+            animation: textBloomFadeIn 1.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* Subtle tap indicator fade-in */
+        @keyframes tapIndicatorFadeIn {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) translateY(10px);
+            }
+            100% {
+                opacity: 0.5;
+                transform: translate(-50%, -50%) translateY(0px);
+            }
+        }
+
+        .tap-indicator-visible {
+            animation: tapIndicatorFadeIn 1s ease-out 0.5s forwards;
         }
 
     </style>
@@ -618,8 +639,13 @@
     </div>
 
     <!-- Birthday Message in Center of Heart - Simple text overlay -->
-    <div id="birthday-message" style="position: absolute; top: calc(50% - 30px); left: 50%; transform: translate(-50%, -50%); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.7; opacity: 0; color: rgba(255, 255, 255, 0.95); text-shadow: 0 0 25px rgba(255, 255, 255, 0.9), 0 0 50px rgba(255, 255, 255, 0.6), 0 2px 10px rgba(0, 0, 0, 0.8);">
+    <div id="birthday-message" style="position: absolute; top: calc(50% - 30px); left: 50%; transform: translate(-50%, -50%); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.7; opacity: 0; color: rgba(255, 255, 255, 0.65); text-shadow: 0 0 25px rgba(255, 255, 255, 0.6), 0 0 50px rgba(255, 255, 255, 0.4), 0 2px 10px rgba(0, 0, 0, 0.8);">
         Happy<br>Birthday<br>Halima
+    </div>
+    
+    <!-- Subtle tap indicator -->
+    <div id="tap-indicator" style="position: absolute; top: calc(50% + 80px); left: 50%; transform: translate(-50%, -50%); font-family: 'Rajdhani', sans-serif; font-size: clamp(0.6rem, 1.5vw, 0.75rem); font-weight: 500; text-align: center; z-index: 15; pointer-events: none; line-height: 1.5; opacity: 0; color: rgba(255, 255, 255, 0.5); text-shadow: 0 0 10px rgba(255, 255, 255, 0.3), 0 2px 5px rgba(0, 0, 0, 0.5); letter-spacing: 1px;">
+        Tap to begin
     </div>
     
     <canvas id="canvas"></canvas>
@@ -1361,6 +1387,15 @@ function showTextOverlay() {
     
     // Trigger bloom fade-in animation by adding the class
     birthdayMessage.classList.add('text-bloom-fade-in');
+    
+    // Show tap indicator after text animation starts
+    setTimeout(() => {
+        const tapIndicator = document.getElementById('tap-indicator');
+        if (tapIndicator) {
+            tapIndicator.classList.add('tap-indicator-visible');
+        }
+    }, 800); // Show tap indicator 800ms after text starts appearing
+    
     state.textRevealed = true;
 }
 
