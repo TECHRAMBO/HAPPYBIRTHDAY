@@ -594,11 +594,9 @@
         </div>
     </div>
 
-    <!-- Birthday Message in Center of Heart - Word by word reveal -->
-    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.7; opacity: 0;">
-        <span id="birthday-text-word1" style="opacity: 0; display: block;"></span>
-        <span id="birthday-text-word2" style="opacity: 0; display: block;"></span>
-        <span id="birthday-text-word3" style="opacity: 0; display: block;"></span>
+    <!-- Birthday Message in Center of Heart - Simple text overlay -->
+    <div id="birthday-message" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Playfair Display', serif; font-size: clamp(0.65rem, 2vw, 0.9rem); font-weight: 600; text-align: center; z-index: 15; pointer-events: none; line-height: 1.7; opacity: 0; color: rgba(255, 255, 255, 0.95); text-shadow: 0 0 25px rgba(255, 255, 255, 0.9), 0 0 50px rgba(255, 255, 255, 0.6), 0 2px 10px rgba(0, 0, 0, 0.8); transition: opacity 0.8s ease-in;">
+        Happy<br>Birthday<br>Halima
     </div>
     
     <canvas id="canvas"></canvas>
@@ -651,27 +649,8 @@ const state = {
     heartFormed: false, // Heart formation complete
     heartAnimationStart: 0, // Timestamp when heart animation started
     heartAnimationDuration: isMobile ? 1200 : 1500, // Faster formation: 1.2-1.5s
-    textForming: false, // Text formation animation in progress
-    textFormed: false, // Text formation complete
-    textAnimationStart: 0, // Timestamp when text animation started
-    textAnimationDuration: isMobile ? 1200 : 1500, // Faster text formation: 1.2-1.5s
-    particlesSwirling: false, // Particles swirling around text
-    swirlStartTime: 0, // Timestamp when swirling started
-    textRevealed: false, // Text reveal animation complete
-    heartParticleIndices: [], // Track which particles are part of heart outline
-    textParticleIndices: [], // Track which particles form text
-    particlesCirculating: false, // Deprecated - removed circulation feature
-    circulationAngle: 0, // Deprecated - removed circulation feature
-    // Particle Flow Magic state variables
-    particleFlowActive: false,        // Particle flow animation in progress
-    particleFlowStart: 0,              // Timestamp when particle flow started
-    particleFlowDuration: isMobile ? 1200 : 1500,  // Duration of particle flow phase
-    textMaterializeStart: 0,           // Timestamp when text materialization starts
-    textMaterializeDuration: isMobile ? 1200 : 1800, // Duration of text materialization
-    heartPulseComplete: false,         // Heart pulse/breath phase complete
-    flowingParticles: [],              // Track particles currently flowing
-    heartPulseStart: 0,                // Timestamp when heart pulse started
-    heartPulseDuration: 400            // Heart pulse duration (300-400ms)
+    textRevealed: false, // Text overlay is visible
+    heartParticleIndices: [] // Track which particles are part of heart outline
 };
 
 /**
@@ -713,11 +692,10 @@ state.targetFrameTime = 1000 / config.targetFPS;
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     
-    // Tap when text is formed: disperse particles and start game
-    if (state.textFormed && !state.gameStarted) {
+    // Tap when text is revealed: disperse particles and start game
+    if (state.textRevealed && !state.gameStarted) {
         state.gameStarted = true;
         state.textBurst = true;
-        state.particlesSwirling = false;
         
         // Hide birthday message
         const birthdayMessage = document.getElementById('birthday-message');
@@ -800,10 +778,9 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mousedown', e => {
     // Click when text is formed: disperse particles and start game
-    if (state.textFormed && !state.gameStarted) {
+    if (state.textRevealed && !state.gameStarted) {
         state.gameStarted = true;
         state.textBurst = true;
-        state.particlesSwirling = false;
         
         // Hide birthday message
         const birthdayMessage = document.getElementById('birthday-message');
@@ -859,17 +836,10 @@ function initGame() {
     state.tapCount = 0;
     state.heartForming = false;
     state.heartFormed = false;
-    state.textForming = false;
-    state.textFormed = false;
     state.textBurst = false;
     state.gameStarted = false;
     state.heartParticleIndices = [];
-    // Reset particle flow magic state
-    state.particleFlowActive = false;
-    state.heartPulseComplete = false;
-    state.heartPulseStart = 0;
     state.textRevealed = false;
-    state.flowingParticles = [];
     
     // Hide all UI elements initially
     document.getElementById('controls').classList.remove('fade-in');
@@ -1105,26 +1075,6 @@ class Particle {
         this.targetX = this.x;
         this.targetY = this.y;
         this.isHeartParticle = false; // Track if particle is part of heart outline
-        this.swirlX = this.x; // Swirl intermediate position
-        this.swirlY = this.y;
-        this.textX = this.x; // Text position for circulation
-        this.textY = this.y;
-        this.circulationRadius = 0; // Distance from text center for circulation
-        this.circulationAngle = 0; // Angle offset for circulation
-        // Particle flow properties
-        this.isFlowing = false; // Track if particle is currently flowing
-        this.flowStartTime = 0; // Timestamp when this particle started flowing
-        this.flowDuration = 0; // Duration of flow for this particle
-        this._flowOpacity = 1; // Opacity during flow (for dissolution)
-        this._flowScale = 1; // Scale during flow
-        // Text particle properties for swirling
-        this.isTextParticle = false; // Track if particle is part of text
-        this.textBaseX = 0; // Base X position in text
-        this.textBaseY = 0; // Base Y position in text
-        this.textOffsetX = 0; // Offset from text center X
-        this.textOffsetY = 0; // Offset from text center Y
-        this.textOffsetDistance = 0; // Distance from text center
-        this.textOffsetAngle = 0; // Angle offset from text center
     }
 
     update() {
@@ -1187,156 +1137,10 @@ class Particle {
             return;
         }
         
-        // Heart pulse/breath phase: Gentle pulse after heart formation completes
-        if (state.heartFormed && !state.heartForming && !state.heartPulseComplete && this.isHeartParticle) {
-            const timeSinceFormed = performance.now() - state.heartPulseStart;
-            if (timeSinceFormed < state.heartPulseDuration && state.heartPulseStart > 0) {
-                // Gentle pulse effect - particles glow slightly brighter
-                const pulseProgress = timeSinceFormed / state.heartPulseDuration;
-                const pulseIntensity = Math.sin(pulseProgress * Math.PI) * 0.2; // Gentle pulse (slightly stronger than before)
-                this._polishPulse = pulseIntensity; // Store for draw() function
-            } else {
-                this._polishPulse = 0;
-            }
-        }
         
-        // Particle Flow Magic phase: Particles flow from heart outline toward text center
-        if (state.particleFlowActive && this.isHeartParticle && this.isFlowing) {
-            // Check if flow should have started
-            const now = performance.now();
-            if (now < this.flowStartTime) {
-                // Flow hasn't started yet for this particle, stay at heart position
-                return;
-            }
-            
-            const elapsed = now - this.flowStartTime;
-            const flowProgress = Math.min(1, elapsed / this.flowDuration);
-            
-            // Smooth easing for elegant flow motion
-            const eased = 1 - Math.pow(1 - flowProgress, 2.5); // Ease-out-exponential
-            
-            // Calculate curved path from heart position to text center
-            const startX = this.targetX; // Heart outline position (preserved from heart formation)
-            const startY = this.targetY;
-            const endX = width / 2; // Text center
-            const endY = height / 2 - (isMobile ? height * 0.08 : height * 0.1); // Text center Y
-            
-            // Elegant curved path using smooth sine wave for natural flow
-            const midX = (startX + endX) / 2;
-            const midY = (startY + endY) / 2;
-            const curveOffset = Math.sin(flowProgress * Math.PI) * 40; // Curved path offset
-            const perpAngle = Math.atan2(endY - startY, endX - startX) + Math.PI / 2;
-            const curveX = midX + Math.cos(perpAngle) * curveOffset;
-            const curveY = midY + Math.sin(perpAngle) * curveOffset;
-            
-            // Cubic bezier-like interpolation for smooth curve
-            const t = eased;
-            const mt = 1 - t;
-            const x = mt * mt * startX + 2 * mt * t * curveX + t * t * endX;
-            const y = mt * mt * startY + 2 * mt * t * curveY + t * t * endY;
-            
-            this.x = x;
-            this.y = y;
-            
-            // Dissolution: Fade out as particle approaches text center
-            const dissolveStart = 0.7; // Start dissolving at 70% progress
-            if (flowProgress > dissolveStart) {
-                const dissolveProgress = (flowProgress - dissolveStart) / (1 - dissolveStart);
-                this._flowOpacity = 1 - dissolveProgress; // Fade from 1 to 0
-            } else {
-                this._flowOpacity = 1;
-            }
-            
-            // Scale slightly during flow for dynamic effect
-            this._flowScale = 0.9 + (flowProgress * 0.1); // Slight scale increase
-            
-            // Flow complete - mark particle as done
-            if (flowProgress >= 1) {
-                this.isFlowing = false;
-                this._flowOpacity = 0; // Fully dissolved
-            }
-            
-            return;
-        }
-        
-        // Phase 2: Text formation animation - particles move from heart to text positions
-        const particleIndex = particles.indexOf(this);
-        if (state.textForming && this.animating && state.textParticleIndices.includes(particleIndex)) {
-            const elapsed = performance.now() - state.textAnimationStart;
-            const progress = Math.min(1, elapsed / state.textAnimationDuration);
-            
-            // Smooth easing for fast, elegant transition
-            const eased = 1 - Math.pow(1 - progress, 3); // Ease-out-cubic for faster animation
-            
-            // Direct animation from heart to text
-            this.x = this.startX + (this.targetX - this.startX) * eased;
-            this.y = this.startY + (this.targetY - this.startY) * eased;
-            this.vx = 0;
-            this.vy = 0;
-            
-            // Animation complete
-            if (progress >= 1) {
-                this.animating = false;
-                this.x = this.targetX;
-                this.y = this.targetY;
-            }
-            return;
-        }
-        
-        // Particles swirling around text (lifelike motion)
-        if (state.particlesSwirling && this.isTextParticle && state.textFormed && !state.textBurst) {
-            const elapsed = performance.now() - state.swirlStartTime;
-            const time = elapsed / 1000; // Convert to seconds for smoother animation
-            
-            // Lifelike swirling: combination of orbital motion and gentle radius variation
-            const baseRadius = this.textOffsetDistance || 50;
-            const swirlSpeed = 0.5 + (this.textOffsetDistance / 200) * 0.3; // Variable speed based on distance
-            const angle = this.textOffsetAngle + time * swirlSpeed;
-            
-            // Gentle radius variation for lifelike motion (subtle pulsing)
-            const radiusVariation = Math.sin(time * 0.8 + this.textOffsetAngle) * 8;
-            const currentRadius = baseRadius + radiusVariation;
-            
-            // Add gentle vertical wave motion
-            const verticalWave = Math.sin(time * 1.2 + this.textOffsetAngle * 2) * 5;
-            
-            // Calculate position around text center
-            const swirlX = state.textCenterX + Math.cos(angle) * currentRadius;
-            const swirlY = state.textCenterY + Math.sin(angle) * currentRadius + verticalWave;
-            
-            this.x = swirlX;
-            this.y = swirlY;
-            
-            // Subtle velocity for smooth motion (will be used for glow effects)
-            const nextAngle = angle + 0.02;
-            const nextRadius = baseRadius + Math.sin((time + 0.02) * 0.8 + this.textOffsetAngle) * 8;
-            const nextX = state.textCenterX + Math.cos(nextAngle) * nextRadius;
-            const nextY = state.textCenterY + Math.sin(nextAngle) * nextRadius + Math.sin((time + 0.02) * 1.2 + this.textOffsetAngle * 2) * 5;
-            this.vx = (nextX - this.x) * 10;
-            this.vy = (nextY - this.y) * 10;
-            
-            return;
-        }
-        
-        // Particle flow phase takes priority - don't block flowing particles
-        if (state.particleFlowActive && this.isFlowing) {
-            // Flow logic is handled above, just return here
-            return;
-        }
-        
-        // Keep heart particles locked in place when heart is formed but text hasn't started
-        if (this.isHeartParticle && state.heartFormed && !state.textForming && !state.textFormed) {
+        // Keep heart particles locked in place when heart is formed
+        if (this.isHeartParticle && state.heartFormed && !state.textBurst) {
             return; // Heart particles stay at their heart positions
-        }
-        
-        // Text formed but not burst yet - keep text particles locked
-        if (state.textFormed && !state.textBurst && state.tapCount === 2) {
-            return; // Text particles stay at their text positions
-        }
-        
-        // Heart formed but text not yet formed - keep particles locked (unless flowing)
-        if (state.heartFormed && !state.particleFlowActive && !state.textForming && !state.textFormed && !state.textBurst && state.tapCount < 3) {
-            return; // Particles stay at their positions (heart or near heart)
         }
 
         let targetX = state.mouseX;
@@ -1391,70 +1195,13 @@ class Particle {
             return; // Don't draw particles until heart formation starts
         }
         
-        // Particle Flow Magic phase: Special rendering for flowing particles
-        if (state.particleFlowActive && this.isFlowing) {
-            // Use flow opacity for dissolution effect
-            const opacity = (this._flowOpacity !== undefined ? this._flowOpacity : 1);
-            const scale = (this._flowScale !== undefined ? this._flowScale : 1);
-            
-            // Enhanced glow during flow - particles glow brighter as they flow
-            let glowBlur = isMobile ? 24 : 30; // Slightly stronger glow during flow
-            let glowIntensity = Math.min(1, (isMobile ? 0.95 : 0.9) * opacity); // Bright glow, affected by opacity
-            
-            // Trail effect: Draw multiple particles behind for trail (simple but effective)
-            const trailSteps = 3;
-            for (let i = 1; i <= trailSteps; i++) {
-                const trailOpacity = opacity * (0.3 / i) * (1 - i / (trailSteps + 1));
-                const trailScale = scale * (1 - i * 0.1);
-                
-                // Estimate previous position (simplified - could be enhanced with position history)
-                const trailOffset = 5 * i;
-                const angle = Math.atan2(this.y - (this.targetY || this.y), this.x - (this.targetX || this.x));
-                const trailX = this.x - Math.cos(angle) * trailOffset;
-                const trailY = this.y - Math.sin(angle) * trailOffset;
-                
-                ctx.shadowBlur = glowBlur * trailScale * 0.8;
-                ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity * trailOpacity})`;
-                ctx.fillStyle = `rgba(255, 255, 255, ${0.98 * trailOpacity})`;
-                ctx.beginPath();
-                ctx.arc(trailX, trailY, this.size * trailScale * 1.2, 0, 6.283185307179586);
-                ctx.fill();
-            }
-            
-            // Main particle with enhanced glow
-            ctx.shadowBlur = glowBlur * scale;
-            ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity})`;
-            ctx.fillStyle = `rgba(255, 255, 255, ${0.98 * opacity})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * scale * 1.25, 0, 6.283185307179586);
-            ctx.fill();
-            
-            // Bright core
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = `rgba(255, 255, 255, ${1 * opacity})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * scale * 0.9, 0, 6.283185307179586);
-            ctx.fill();
-            return;
-        }
-        
-        // Elegant white luminescent glow for heart particles and text particles
-        if (state.heartForming || 
-            (state.heartFormed && !state.textForming && !state.textFormed && !state.textBurst && this.isHeartParticle) ||
-            (state.textForming && this.animating && state.textParticleIndices.includes(particles.indexOf(this))) ||
-            (state.textFormed && !state.textBurst && this.isTextParticle)) {
-            
+        // Elegant white luminescent glow for heart particles
+        if (state.heartForming || (state.heartFormed && !state.textBurst && this.isHeartParticle)) {
             // Enhanced HD glow effect - optimized for mobile (cleaner, prettier) and desktop (crisp)
-            let glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
-            let glowIntensity = isMobile ? 0.88 : 0.82; // Optimized intensity
+            const glowBlur = isMobile ? 20 : 26; // Refined glow values for cleaner look
+            const glowIntensity = isMobile ? 0.88 : 0.82; // Optimized intensity
             const glowRadius = isMobile ? 1.15 : 1.25; // Slightly tighter glow on mobile
             const coreSize = isMobile ? 0.92 : 0.87; // Larger core on mobile for better visibility
-            
-            // Polish effect: Slightly enhanced glow when heart just formed (subtle pulse)
-            if (this._polishPulse && this._polishPulse > 0) {
-                glowBlur += this._polishPulse * 8; // Slightly larger glow
-                glowIntensity = Math.min(1, glowIntensity + this._polishPulse); // Slightly brighter
-            }
             
             // Refined ethereal glow effect - soft outer glow with bright core
             ctx.shadowBlur = glowBlur;
@@ -1465,30 +1212,6 @@ class Particle {
             ctx.fill();
             
             // Bright core for clarity and HD crispness
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * coreSize, 0, 6.283185307179586);
-            ctx.fill();
-            return;
-        }
-        
-        // Legacy text formation rendering (deprecated but keep for compatibility)
-        if (state.textForming || 
-            (state.textFormed && !state.textBurst && state.tapCount === 2)) {
-            
-            let glowBlur = isMobile ? 20 : 26;
-            let glowIntensity = isMobile ? 0.88 : 0.82;
-            const glowRadius = isMobile ? 1.15 : 1.25;
-            const coreSize = isMobile ? 0.92 : 0.87;
-            
-            ctx.shadowBlur = glowBlur;
-            ctx.shadowColor = `rgba(255, 255, 255, ${glowIntensity})`;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * glowRadius, 0, 6.283185307179586);
-            ctx.fill();
-            
             ctx.shadowBlur = 0;
             ctx.fillStyle = 'rgba(255, 255, 255, 1)';
             ctx.beginPath();
@@ -1585,15 +1308,7 @@ function startHeartFormation() {
         state.heartParticleIndices.push(i);
     });
     
-    // Show birthday message when heart forms - position at heart center
-    const birthdayMessage = document.getElementById('birthday-message');
-    if (birthdayMessage) {
-        // Position message at heart center (centerX already handled by translate(-50%, -50%))
-        const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
-        birthdayMessage.style.top = heartCenterY + 'px';
-        birthdayMessage.style.left = '50%'; // Ensure proper centering
-        birthdayMessage.style.transform = 'translate(-50%, -50%)'; // Center horizontally and vertically
-    }
+    // Text overlay will be positioned at heart center (handled by CSS)
     
     // Check for animation completion after duration
     setTimeout(() => {
@@ -1607,311 +1322,40 @@ function startHeartFormation() {
             p.animating = false;
         });
         
-        // Immediately start text formation - heart collapses into text
+        // Show text overlay after heart forms
         setTimeout(() => {
-            startTextFormation();
-        }, 200); // Brief 200ms pause before collapsing
+            showTextOverlay();
+        }, 400); // 400ms delay after heart formation
     }, state.heartAnimationDuration);
 }
 
 /**
- * Start Particle Flow Magic and Text Materialization
- * Particles flow from heart outline toward text center, text materializes word-by-word
+ * Show text overlay - Simple fade-in animation
  */
-function startParticleFlowAndTextMaterialization() {
+function showTextOverlay() {
     const birthdayMessage = document.getElementById('birthday-message');
     if (!birthdayMessage) return;
     
-    // Show the container (initially transparent)
+    // Simple fade-in
     birthdayMessage.style.opacity = '1';
-    
-    // Calculate text center position
-    const textCenterX = width / 2;
-    const textCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
-    
-    // Start particle flow phase
-    state.particleFlowActive = true;
-    state.particleFlowStart = performance.now();
-    state.flowingParticles = [];
-    
-    // Start text materialization slightly after particle flow begins
-    state.textMaterializeStart = state.particleFlowStart + (isMobile ? 300 : 400);
-    
-    // Initialize all heart particles for flow with staggered timing
-    const totalParticles = state.heartParticleIndices.length;
-    const staggerDuration = state.particleFlowDuration * 0.3; // Particles start flowing over 30% of duration
-    
-    state.heartParticleIndices.forEach((particleIndex, i) => {
-        const particle = particles[particleIndex];
-        if (!particle || !particle.isHeartParticle) return;
-        
-        // Stagger particle start times for cascading flow effect
-        const staggerProgress = i / totalParticles;
-        const startDelay = staggerProgress * staggerDuration;
-        
-        // Mark particle as flowing
-        particle.isFlowing = true;
-        particle.flowStartTime = state.particleFlowStart + startDelay;
-        particle.flowDuration = state.particleFlowDuration - startDelay; // Faster flow for later particles
-        
-        state.flowingParticles.push(particleIndex);
-    });
-    
-    // Start text materialization word-by-word
-    const words = [
-        { id: 'birthday-text-word1', text: 'Happy', materializeDelay: 0 },
-        { id: 'birthday-text-word2', text: 'Birthday', materializeDelay: isMobile ? 600 : 700 },
-        { id: 'birthday-text-word3', text: 'Halima', materializeDelay: isMobile ? 1200 : 1400 }
-    ];
-    
-    words.forEach((word, index) => {
-        setTimeout(() => {
-            materializeWord(word.id, word.text, index === words.length - 1);
-        }, state.textMaterializeStart - state.particleFlowStart + word.materializeDelay);
-    });
-    
-    // Complete animation after text materialization
-    setTimeout(() => {
-        state.textRevealed = true;
-        state.particleFlowActive = false;
-        
-        // Fade out remaining flowing particles
-        state.flowingParticles.forEach(particleIndex => {
-            const particle = particles[particleIndex];
-            if (particle && particle.isFlowing) {
-                particle.isFlowing = false;
-                particle._flowOpacity = 0;
-            }
-        });
-    }, state.textMaterializeStart - state.particleFlowStart + words[words.length - 1].materializeDelay + state.textMaterializeDuration);
+    state.textRevealed = true;
 }
 
 /**
- * Materialize a word with dynamic glow building
+ * Start text formation animation (Phase 2) - REMOVED - using simple HTML overlay instead
  */
-function materializeWord(wordId, wordText, isLast) {
-    const wordEl = document.getElementById(wordId);
-    if (!wordEl) return;
-    
-    wordEl.textContent = wordText;
-    
-    // Enhanced glow/aura effect - stronger for HALIMA
-    const isHalima = wordText === 'Halima';
-    const glowIntensity = isHalima ? 1.0 : 0.9; // HALIMA is brightest
-    const glowBlur = isHalima ? 30 : 25; // HALIMA has stronger glow
-    const glowSpread = isHalima ? 15 : 12; // HALIMA has wider aura
-    
-    // Initial state: transparent, no glow
-    wordEl.style.opacity = '0';
-    wordEl.style.color = `rgba(255, 255, 255, 0)`;
-    wordEl.style.textShadow = `
-        0 0 ${glowBlur}px rgba(255, 255, 255, 0),
-        0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, 0),
-        0 0 ${glowBlur * 2}px rgba(255, 255, 255, 0),
-        0 0 ${glowSpread}px rgba(255, 255, 255, 0),
-        0 2px 10px rgba(0, 0, 0, 0.8)
-    `;
-    
-    // Smooth materialization animation with glow building
-    const duration = isLast ? state.textMaterializeDuration : state.textMaterializeDuration * 0.8;
-    wordEl.style.transition = `opacity ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), text-shadow ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), color ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`;
-    
-    // Force reflow to ensure initial state is applied
-    wordEl.offsetHeight;
-    
-    // Final state: fully visible with full glow
-    wordEl.style.opacity = '1';
-    wordEl.style.color = `rgba(255, 255, 255, ${glowIntensity})`;
-    wordEl.style.textShadow = `
-        0 0 ${glowBlur}px rgba(255, 255, 255, ${glowIntensity}),
-        0 0 ${glowBlur * 1.5}px rgba(255, 255, 255, ${glowIntensity * 0.8}),
-        0 0 ${glowBlur * 2}px rgba(255, 255, 255, ${glowIntensity * 0.6}),
-        0 0 ${glowSpread}px rgba(255, 255, 255, ${glowIntensity * 0.4}),
-        0 2px 10px rgba(0, 0, 0, 0.8)
-    `;
-}
 
 /**
- * Start text formation animation (Phase 2) - DEPRECATED
- * Simple: Particles disperse from heart directly to text positions
+ * startTextFormation - REMOVED (using simple HTML overlay instead)
  */
-function startTextFormation() {
-    if (state.tapCount !== 1 || !state.heartFormed || state.textForming || state.textFormed) return;
-    
-    state.textForming = true;
-    state.textAnimationStart = performance.now();
-    
-    // Hide "tap again" instruction
-    const tapAgainInstruction = document.getElementById('tap-again-instruction');
-    if (tapAgainInstruction) {
-        tapAgainInstruction.style.opacity = '0';
-    }
-    
-    const text = "HAPPY\nBIRTHDAY\nHALIMA";
-    const lines = text.split('\n');
-    
-    // Calculate responsive font size
-    const baseFontSize = isMobile 
-        ? Math.min(width, height) * 0.08
-        : Math.min(width, height) * 0.10;
-    const fontSize = baseFontSize;
-    const lineHeight = fontSize * 1.3;
-    
-    // Create temporary canvas for text rendering
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    // Render text to get pixel data - use lighter font weight for thinner, more readable text
-    tempCtx.fillStyle = 'white';
-    tempCtx.font = `500 ${fontSize}px 'Rajdhani', Arial, sans-serif`; // Lighter weight (500 vs 600) for thinner text
-    tempCtx.textAlign = 'center';
-    tempCtx.textBaseline = 'middle';
-    
-    // Calculate text block dimensions - position text below heart but not too low
-    const textWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width));
-    const textHeight = lines.length * lineHeight;
-    const centerX = width / 2;
-    const heartCenterY = height / 2 - (isMobile ? height * 0.08 : height * 0.1);
-    const heartSize = Math.min(width, height) * (isMobile ? 0.30 : 0.32);
-    // Position text closer to heart - not too low on screen
-    const textCenterY = heartCenterY + (heartSize * 0.5) + (isMobile ? textHeight * 0.4 : textHeight * 0.5);
-    
-    // Draw text on temp canvas
-    lines.forEach((line, i) => {
-        const y = textCenterY - textHeight / 2 + (i + 0.5) * lineHeight;
-        tempCtx.fillText(line, centerX, y);
-    });
-    
-    // Get pixel data
-    const imageData = tempCtx.getImageData(0, 0, width, height);
-    const textPixels = [];
-    
-    // Sample pixels with higher threshold to get cleaner, thinner text outline
-    // Only get edge pixels, not filled interior for thinner, readable text
-    for (let y = 0; y < height; y += 1) {
-        for (let x = 0; x < width; x += 1) {
-            const index = (y * width + x) * 4;
-            const alpha = imageData.data[index + 3];
-            // Higher threshold (200 vs 128) to get cleaner edges, avoid interior fill pixels
-            if (alpha > 200) {
-                textPixels.push({ x, y });
-            }
-        }
-    }
-    
-    if (textPixels.length === 0) {
-        console.warn('No text pixels found - trying lower threshold');
-        // Fallback: try with lower threshold if no pixels found
-        for (let y = 0; y < height; y += 1) {
-            for (let x = 0; x < width; x += 1) {
-                const index = (y * width + x) * 4;
-                const alpha = imageData.data[index + 3];
-                if (alpha > 128) {
-                    textPixels.push({ x, y });
-                }
-            }
-        }
-        if (textPixels.length === 0) {
-            console.warn('Still no text pixels found');
-            return;
-        }
-    }
-    
-    // Auto-adjust particle count for legible, clean text
-    // Reduced density: ~0.15-0.2 particles per pixel for thin, readable text (not thick)
-    const optimalParticleCount = Math.floor(textPixels.length * (isMobile ? 0.15 : 0.2));
-    const maxAvailableParticles = particles.length;
-    const textParticleCount = Math.min(optimalParticleCount, maxAvailableParticles);
-    
-    // Ensure minimum particles for readability but not too many
-    const minParticlesForText = Math.floor(textPixels.length * 0.1); // Minimum 10% for visibility
-    const finalParticleCount = Math.max(minParticlesForText, Math.min(textParticleCount, maxAvailableParticles));
-    
-    // Select particles to use for text - use optimal count for thin, readable text
-    state.textParticleIndices = [];
-    const particlesForText = [];
-    
-    // Use particles evenly distributed from all heart particles
-    const step = Math.max(1, Math.floor(particles.length / finalParticleCount));
-    for (let i = 0; i < finalParticleCount; i++) {
-        const particleIndex = (i * step) % particles.length;
-        const p = particles[particleIndex];
-        particlesForText.push(p);
-        state.textParticleIndices.push(particleIndex);
-        p.isHeartParticle = false; // Remove from heart, will form text
-        p.isTextParticle = true; // Mark as text particle
-    }
-    
-    // Store current heart positions as start positions (simple direct animation)
-    particlesForText.forEach((p, i) => {
-        p.startX = p.x;
-        p.startY = p.y;
-    });
-    
-    // Distribute text particles to text positions with proper spacing for readability
-    // Use larger step to create thinner, more legible text
-    const pixelStep = Math.max(2, Math.floor(textPixels.length / particlesForText.length)); // Larger step = thinner text
-    particlesForText.forEach((p, i) => {
-        const pixelIndex = (i * pixelStep) % textPixels.length;
-        const pixel = textPixels[pixelIndex];
-        p.targetX = pixel.x;
-        p.targetY = pixel.y;
-        p.animating = true;
-        p.vx = 0;
-        p.vy = 0;
-    });
-    
-    // Calculate text bounds for click detection
-    const textBounds = {
-        minX: Math.min(...textPixels.map(p => p.x)),
-        maxX: Math.max(...textPixels.map(p => p.x)),
-        minY: Math.min(...textPixels.map(p => p.y)),
-        maxY: Math.max(...textPixels.map(p => p.y)),
-        centerX: centerX,
-        centerY: textCenterY
-    };
-    
-    // Store text bounds for click detection
-    state.textBounds = textBounds;
-    
-    // Store text center for swirling
-    state.textCenterX = centerX;
-    state.textCenterY = textCenterY;
-    
-    // Check for animation completion after duration
-    setTimeout(() => {
-        state.textForming = false;
-        state.textFormed = true;
-        
-        // Lock text particles at target positions and prepare for swirling
-        particlesForText.forEach(p => {
-            p.x = p.targetX;
-            p.y = p.targetY;
-            p.animating = false;
-            p.isTextParticle = true; // Mark as text particle
-            // Store base position for swirling
-            p.textBaseX = p.targetX;
-            p.textBaseY = p.targetY;
-            // Calculate offset from text center for swirling
-            p.textOffsetX = p.targetX - centerX;
-            p.textOffsetY = p.targetY - textCenterY;
-            p.textOffsetDistance = Math.sqrt(p.textOffsetX * p.textOffsetX + p.textOffsetY * p.textOffsetY);
-            p.textOffsetAngle = Math.atan2(p.textOffsetY, p.textOffsetX);
-        });
-        
-        // Hide HTML text overlay
-        const birthdayMessage = document.getElementById('birthday-message');
-        if (birthdayMessage) {
-            birthdayMessage.style.opacity = '0';
-        }
-        
-        // Start swirling motion around text
-        state.particlesSwirling = true;
-        state.swirlStartTime = performance.now();
-    }, state.textAnimationDuration);
-}
+
+/**
+ * startParticleFlowAndTextMaterialization - REMOVED (using simple HTML overlay instead)
+ */
+
+/**
+ * materializeWord - REMOVED (using simple HTML overlay instead)
+ */
 
 /**
  * Generate refined heart shape outline positions (Hollow Knight SOUL meter aesthetic)
