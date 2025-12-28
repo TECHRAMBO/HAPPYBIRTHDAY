@@ -612,7 +612,7 @@
             <span id="mode-label" style="font-size:0.7rem">Gravity</span>
         </div>
 
-        <!-- Time Dilation (Double Tap to Toggle) -->
+        <!-- Time Dilation (Hold or Double Tap to Toggle) -->
         <div id="btn-slow" class="control-btn">
             <span>Slow</span>
             <span style="font-size:0.7rem">Motion</span>
@@ -679,7 +679,9 @@ const state = {
     // Double tap detection for slow motion toggle
     lastSlowTapTime: 0,
     lastSlowTapX: 0,
-    lastSlowTapY: 0
+    lastSlowTapY: 0,
+    slowMoToggled: false, // Persistent toggle state from double tap
+    slowMoHeld: false // Temporary state from holding button
 };
 
 /**
@@ -896,22 +898,78 @@ canvas.addEventListener('mouseup', e => {
 /**
  * UI CONTROLS
  */
-// Setup slow motion button double tap/click handler
+// Setup slow motion button - supports both hold and double tap/click
 function initSlowMotionButton() {
     const btnSlow = document.getElementById('btn-slow');
     if (!btnSlow) return;
     
-    // Unified double tap/click handler for both touch and mouse
+    // Use a small delay to distinguish between single tap (hold) and double tap
+    let holdTimer = null;
+    const HOLD_DELAY = 150; // ms - delay before hold activates
+    
+    // Touch handlers - both hold and double tap
     btnSlow.addEventListener('touchstart', (e) => {
         e.preventDefault();
         const touch = e.touches[0];
+        
+        // Check for double tap (this will toggle if it's a double tap)
         toggleSlowMotion(touch.clientX, touch.clientY);
+        
+        // Set up hold timer - activate hold after delay
+        holdTimer = setTimeout(() => {
+            setSlowHold(true);
+        }, HOLD_DELAY);
     }, { passive: false });
     
-    // Mouse click handler (uses same double-tap logic)
-    btnSlow.addEventListener('click', (e) => {
+    btnSlow.addEventListener('touchend', (e) => {
         e.preventDefault();
+        
+        // Clear hold timer (prevent hold if user lifted finger quickly)
+        if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+        }
+        
+        // Release hold state (toggle state persists)
+        setSlowHold(false);
+    }, { passive: false });
+    
+    // Mouse handlers - both hold and double click
+    btnSlow.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        
+        // Check for double tap/click (this will toggle if it's a double click)
         toggleSlowMotion(e.clientX, e.clientY);
+        
+        // Set up hold timer - activate hold after delay
+        holdTimer = setTimeout(() => {
+            setSlowHold(true);
+        }, HOLD_DELAY);
+    });
+    
+    btnSlow.addEventListener('mouseup', (e) => {
+        e.preventDefault();
+        
+        // Clear hold timer
+        if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+        }
+        
+        // Release hold state (toggle state persists)
+        setSlowHold(false);
+    });
+    
+    // Also handle mouse leave while holding
+    btnSlow.addEventListener('mouseleave', (e) => {
+        // Clear hold timer
+        if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+        }
+        
+        // Release hold state (toggle state persists)
+        setSlowHold(false);
     });
 }
 
@@ -924,6 +982,10 @@ function initGame() {
     state.gameStarted = false;
     state.heartParticleIndices = [];
     state.textRevealed = false;
+    // Reset slow motion states
+    state.slowMoToggled = false;
+    state.slowMoHeld = false;
+    state.isSlowMo = false;
     
     // Hide all UI elements initially
     document.getElementById('controls').classList.remove('fade-in');
@@ -976,6 +1038,27 @@ function toggleMode() {
     if (navigator.vibrate) navigator.vibrate(50);
 }
 
+function updateSlowMotionState() {
+    // Slow motion is active if either toggled OR held
+    state.isSlowMo = state.slowMoToggled || state.slowMoHeld;
+    const btn = document.getElementById('btn-slow');
+    
+    if (state.isSlowMo) {
+        btn.classList.add('active');
+    } else {
+        btn.classList.remove('active');
+    }
+}
+
+function setSlowHold(active) {
+    state.slowMoHeld = active;
+    updateSlowMotionState();
+    
+    if (active && navigator.vibrate) {
+        navigator.vibrate(20);
+    }
+}
+
 function toggleSlowMotion(x, y) {
     const now = performance.now();
     const timeSinceLastTap = now - state.lastSlowTapTime;
@@ -990,22 +1073,18 @@ function toggleSlowMotion(x, y) {
     
     // Check if this is a double tap (within time and distance thresholds)
     if (timeSinceLastTap < timeThreshold && distance < distanceThreshold) {
-        // Double tap detected - toggle slow motion
-        state.isSlowMo = !state.isSlowMo;
-        const btn = document.getElementById('btn-slow');
+        // Double tap detected - toggle persistent slow motion state
+        state.slowMoToggled = !state.slowMoToggled;
+        updateSlowMotionState();
         
-        if (state.isSlowMo) {
-            btn.classList.add('active');
-            if (navigator.vibrate) navigator.vibrate(30);
-        } else {
-            btn.classList.remove('active');
-            if (navigator.vibrate) navigator.vibrate(15);
+        if (navigator.vibrate) {
+            navigator.vibrate(state.slowMoToggled ? 30 : 15);
         }
         
         // Reset tap tracking to prevent triple-tap toggling
         state.lastSlowTapTime = 0;
     } else {
-        // First tap - record time and position
+        // First tap - record time and position for potential double tap
         state.lastSlowTapTime = now;
         state.lastSlowTapX = x;
         state.lastSlowTapY = y;
