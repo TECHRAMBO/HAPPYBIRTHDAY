@@ -1354,20 +1354,25 @@ class Particle {
         distSq = distSq < 1000 ? 1000 : (distSq > 400000 ? 400000 : distSq);
 
         // Cached calculations for better performance
-        const timeScale = state.isSlowMo ? 0.15 : 1.0;
+        // Slightly higher timeScale for smoother feel (0.2 instead of 0.15)
+        const timeScale = state.isSlowMo ? 0.2 : 1.0;
         const force = (config.gravityStrength * state.gravityMode * 800) / distSq;
-        const forceX = dx * force * timeScale;
-        const forceY = dy * force * timeScale;
+        const forceX = dx * force;
+        const forceY = dy * force;
 
-        // Apply forces
+        // Apply forces (forces are NOT scaled by timeScale for consistent physics)
         this.vx += forceX;
         this.vy += forceY;
 
-        // Apply friction
-        this.vx *= config.friction;
-        this.vy *= config.friction;
+        // Apply friction - reduced in slow motion for smoother, more fluid feel
+        // This prevents particles from decelerating too quickly in slow motion
+        const frictionFactor = state.isSlowMo ? 
+            config.friction + (1 - config.friction) * 0.3 : // Less friction in slow mo
+            config.friction;
+        this.vx *= frictionFactor;
+        this.vy *= frictionFactor;
 
-        // Update position
+        // Update position - scaled by timeScale for visual slow motion effect
         const moveX = this.vx * timeScale;
         const moveY = this.vy * timeScale;
         this.x += moveX;
@@ -1674,6 +1679,13 @@ function formParticlesIntoTextAndHeart() {
 }
 
 function createShockwave(x, y, multiplier) {
+    // Get timeScale for slow motion compensation
+    const timeScale = state.isSlowMo ? 0.2 : 1.0;
+    
+    // In slow motion, boost explosion force slightly to maintain impact
+    // This compensates for the visual slow-down while keeping physics satisfying
+    const slowMoBoost = state.isSlowMo ? 1.4 : 1.0;
+    
     particles.forEach(p => {
         const dx = p.x - x;
         const dy = p.y - y;
@@ -1683,7 +1695,8 @@ function createShockwave(x, y, multiplier) {
         if (dist < maxDist) {
             const force = (maxDist - dist) / maxDist; // 0.0 to 1.0
             const angle = Math.atan2(dy, dx);
-            const strength = config.shockwaveForce * force * multiplier;
+            // Apply slow motion boost to maintain satisfying explosion feel
+            const strength = config.shockwaveForce * force * multiplier * slowMoBoost;
             
             p.vx += Math.cos(angle) * strength;
             p.vy += Math.sin(angle) * strength;
