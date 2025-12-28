@@ -612,12 +612,8 @@
             <span id="mode-label" style="font-size:0.7rem">Gravity</span>
         </div>
 
-        <!-- Time Dilation (Hold) -->
-        <div id="btn-slow" class="control-btn" 
-             ontouchstart="setSlow(true)" 
-             ontouchend="setSlow(false)"
-             onmousedown="setSlow(true)"
-             onmouseup="setSlow(false)">
+        <!-- Time Dilation (Double Tap to Toggle) -->
+        <div id="btn-slow" class="control-btn">
             <span>Slow</span>
             <span style="font-size:0.7rem">Motion</span>
         </div>
@@ -679,7 +675,11 @@ const state = {
     heartAnimationStart: 0, // Timestamp when heart animation started
     heartAnimationDuration: isMobile ? 1200 : 1500, // Faster formation: 1.2-1.5s
     textRevealed: false, // Text overlay is visible
-    heartParticleIndices: [] // Track which particles are part of heart outline
+    heartParticleIndices: [], // Track which particles are part of heart outline
+    // Double tap detection for slow motion toggle
+    lastSlowTapTime: 0,
+    lastSlowTapX: 0,
+    lastSlowTapY: 0
 };
 
 /**
@@ -896,6 +896,25 @@ canvas.addEventListener('mouseup', e => {
 /**
  * UI CONTROLS
  */
+// Setup slow motion button double tap/click handler
+function initSlowMotionButton() {
+    const btnSlow = document.getElementById('btn-slow');
+    if (!btnSlow) return;
+    
+    // Unified double tap/click handler for both touch and mouse
+    btnSlow.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        toggleSlowMotion(touch.clientX, touch.clientY);
+    }, { passive: false });
+    
+    // Mouse click handler (uses same double-tap logic)
+    btnSlow.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleSlowMotion(e.clientX, e.clientY);
+    });
+}
+
 function initGame() {
     // Simplified: Start with heart formation automatically
     state.tapCount = 0;
@@ -928,6 +947,9 @@ function initGame() {
         particleCountDisplay.textContent = config.particleCount;
     }
     
+    // Initialize slow motion button
+    initSlowMotionButton();
+    
     // Auto-start heart formation on load
     setTimeout(() => {
         startHeartFormation();
@@ -954,14 +976,39 @@ function toggleMode() {
     if (navigator.vibrate) navigator.vibrate(50);
 }
 
-function setSlow(active) {
-    state.isSlowMo = active;
-    const btn = document.getElementById('btn-slow');
-    if(active) {
-        btn.classList.add('active');
-        if (navigator.vibrate) navigator.vibrate(20);
+function toggleSlowMotion(x, y) {
+    const now = performance.now();
+    const timeSinceLastTap = now - state.lastSlowTapTime;
+    const distanceThreshold = 50; // pixels
+    const timeThreshold = 400; // milliseconds
+    
+    // Calculate distance from last tap
+    const distance = Math.sqrt(
+        Math.pow(x - state.lastSlowTapX, 2) + 
+        Math.pow(y - state.lastSlowTapY, 2)
+    );
+    
+    // Check if this is a double tap (within time and distance thresholds)
+    if (timeSinceLastTap < timeThreshold && distance < distanceThreshold) {
+        // Double tap detected - toggle slow motion
+        state.isSlowMo = !state.isSlowMo;
+        const btn = document.getElementById('btn-slow');
+        
+        if (state.isSlowMo) {
+            btn.classList.add('active');
+            if (navigator.vibrate) navigator.vibrate(30);
+        } else {
+            btn.classList.remove('active');
+            if (navigator.vibrate) navigator.vibrate(15);
+        }
+        
+        // Reset tap tracking to prevent triple-tap toggling
+        state.lastSlowTapTime = 0;
     } else {
-        btn.classList.remove('active');
+        // First tap - record time and position
+        state.lastSlowTapTime = now;
+        state.lastSlowTapX = x;
+        state.lastSlowTapY = y;
     }
 }
 
